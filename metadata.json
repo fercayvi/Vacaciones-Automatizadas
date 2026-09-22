@@ -1,0 +1,6 @@
+{
+  "name": "Portal de Vacaciones y Asistencia",
+  "description": "Sistema corporativo de autoservicio para consulta de saldos, registro de solicitudes de vacaciones y días flex con integración Intelexion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
