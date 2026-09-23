@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Briefcase
 } from 'lucide-react';
+import ApprovalsView from './ApprovalsView';
 
 interface Solicitud {
   id: string;
@@ -33,6 +34,10 @@ interface Solicitud {
 export default function App() {
   // Manejo de Vistas (VISTA 1: Login, VISTA 2: Dashboard)
   const [vistaActual, setVistaActual] = useState<'login' | 'dashboard'>('login');
+
+  // Pestaña Activa en el Dashboard: 'mis-solicitudes' (Colaborador) | 'aprobaciones' (Jefe Directo)
+  const [pestanaActiva, setPestanaActiva] = useState<'mis-solicitudes' | 'aprobaciones'>('mis-solicitudes');
+  const [conteoPendientesJefe, setConteoPendientesJefe] = useState(4);
 
   // Estado del Formulario de Login
   const [loginEmail, setLoginEmail] = useState('fecarrillo@ayvi.com.mx');
@@ -117,17 +122,13 @@ export default function App() {
   const [tipoSeleccionado, setTipoSeleccionado] = useState<'Vacaciones' | 'Día Flex'>('Vacaciones');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
-  const [solicitarSaldoCero, setSolicitarSaldoCero] = useState(false);
-  const [motivoSolicitud, setMotivoSolicitud] = useState('');
+  const [isExceptionMode, setIsExceptionMode] = useState(false);
+  const [justification, setJustification] = useState('');
   const [mensajeFeedback, setMensajeFeedback] = useState<{ tipo: 'exito' | 'error' | 'info'; texto: string } | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [modalEdicion, setModalEdicion] = useState<Solicitud | null>(null);
   const [modalConfirmarReversar, setModalConfirmarReversar] = useState<Solicitud | null>(null);
   const [filtroEstatus, setFiltroEstatus] = useState<'todos' | 'Pendiente' | 'Aprobado'>('todos');
-
-  // Lógica condicional: Si el interruptor está activo O si el saldo es 0
-  const saldoActualTipo = tipoSeleccionado === 'Vacaciones' ? saldoVacacionesCalculado : saldoFlexCalculado;
-  const requiereMotivo = solicitarSaldoCero || saldoActualTipo === 0;
 
   // Manejador del Login
   const handleLogin = (e: React.FormEvent) => {
@@ -205,13 +206,60 @@ export default function App() {
       return;
     }
 
-    // Validación de Saldo en 0
-    if (requiereMotivo && (!motivoSolicitud || motivoSolicitud.trim().length < 5)) {
-      setMensajeFeedback({
-        tipo: 'error',
-        texto: 'El campo "Motivo de la solicitud" es obligatorio para solicitudes con saldo en 0 o por excepción (mínimo 5 caracteres).',
-      });
-      return;
+    // LÓGICA DE VALIDACIÓN (Reglas Normales vs Modo Excepción):
+    if (!isExceptionMode) {
+      // Regla 1: Validar que la fecha de inicio sea al menos 7 días desde hoy
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      const inicioDate = new Date(fechaInicio + 'T00:00:00');
+      const diffTime = inicioDate.getTime() - hoy.getTime();
+      const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDias < 7) {
+        setMensajeFeedback({
+          tipo: 'error',
+          texto: 'Las solicitudes regulares requieren al menos 7 días de anticipación. Para tramitar con menor tiempo, activa el Modo Excepción.',
+        });
+        return;
+      }
+
+      // Regla 2: Validar que el saldo sea suficiente
+      const saldoDisponible = tipoSeleccionado === 'Vacaciones' ? saldoVacacionesCalculado : saldoFlexCalculado;
+      if (diasTotal > saldoDisponible) {
+        setMensajeFeedback({
+          tipo: 'error',
+          texto: `Saldo insuficiente (${saldoDisponible} ${saldoDisponible === 1 ? 'día disponible' : 'días disponibles'} vs ${diasTotal} solicitados). Para tramitar sin saldo, activa el Modo Excepción.`,
+        });
+        return;
+      }
+
+      // Regla 3: No permitir Días Flex consecutivos
+      if (tipoSeleccionado === 'Día Flex') {
+        const tieneConsecutivo = solicitudes.some((s) => {
+          if (s.tipo !== 'Día Flex' || s.estatus === 'Cancelada (Reversada)') return false;
+          const sDate = new Date(s.fechaInicio + 'T00:00:00');
+          const diff = Math.abs(Math.round((inicioDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)));
+          return diff <= 1;
+        });
+
+        if (tieneConsecutivo) {
+          setMensajeFeedback({
+            tipo: 'error',
+            texto: 'Por política de la empresa no se permiten Días Flex consecutivos. Para casos extraordinarios, activa el Modo Excepción.',
+          });
+          return;
+        }
+      }
+    } else {
+      // Modo Excepción: Se omiten las reglas de anticipación, saldos y días consecutivos.
+      // Pero la justificación es obligatoria y debe tener al menos 10 caracteres.
+      if (!justification || justification.trim().length < 10) {
+        setMensajeFeedback({
+          tipo: 'error',
+          texto: 'La justificación es obligatoria para el Modo Excepción y debe tener al menos 10 caracteres.',
+        });
+        return;
+      }
     }
 
     // Crear solicitud
@@ -223,22 +271,24 @@ export default function App() {
       fechaFin: finFinal,
       dias: diasTotal,
       estatus: 'Pendiente de Aprobación (Jefe)',
-      esExcepcion: requiereMotivo,
-      motivo: motivoSolicitud.trim() || undefined,
+      esExcepcion: isExceptionMode,
+      motivo: isExceptionMode ? justification.trim() : undefined,
       fechaRegistro: 'Hoy',
     };
 
     setSolicitudes([nuevaSol, ...solicitudes]);
     setMensajeFeedback({
       tipo: 'exito',
-      texto: `Solicitud ${nuevaSol.id} registrada con éxito. Notificación enviada a ${colaborador.jefeDirecto} para su revisión.`,
+      texto: isExceptionMode
+        ? `Solicitud por Excepción ${nuevaSol.id} registrada. Enviada a ${colaborador.jefeDirecto} para su revisión manual obligatoria.`
+        : `Solicitud ${nuevaSol.id} registrada con éxito. Notificación enviada a ${colaborador.jefeDirecto} para su revisión.`,
     });
 
     // Reset de formulario
     setFechaInicio('');
     setFechaFin('');
-    setMotivoSolicitud('');
-    setSolicitarSaldoCero(false);
+    setJustification('');
+    setIsExceptionMode(false);
 
     setTimeout(() => {
       setMensajeFeedback(null);
@@ -293,21 +343,11 @@ export default function App() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          {/* Logo simulado corporativo */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded bg-blue-600 text-white font-bold text-xl mb-3 shadow-none">
-              <Building2 className="w-6 h-6" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-              Portal de Colaboradores
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Sistema de Gestión de Vacaciones, Permisos y Asistencia
-            </p>
-          </div>
-
           {/* Tarjeta de Login */}
           <div className="bg-white py-8 px-6 border border-gray-200 rounded-lg sm:px-10">
+            <h2 className="text-xl font-bold tracking-tight text-gray-900 mb-6 text-center">
+              Iniciar Sesión
+            </h2>
             <form className="space-y-5" onSubmit={handleLogin}>
               <div>
                 <label
@@ -395,12 +435,6 @@ export default function App() {
               </div>
             </div>
           </div>
-
-          <div className="mt-4 text-center">
-            <span className="text-xs text-gray-400">
-              Intelexion HR Connector v24.9 · Ayvi Soluciones Corporativas
-            </span>
-          </div>
         </div>
       </div>
     );
@@ -422,74 +456,97 @@ export default function App() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Zona 1: Brand / Título corporativo */}
+            {/* Perfil del Colaborador con No. de Nómina y Cerrar Sesión */}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                <Building2 className="w-4 h-4" />
+              <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs border border-blue-200 shrink-0">
+                FC
               </div>
               <div>
-                <span className="text-base font-semibold text-gray-900 tracking-tight block">
-                  Portal de Colaboradores
-                </span>
-                <span className="text-xs text-gray-500 hidden sm:block">
-                  Módulo de Vacaciones y Asistencia
-                </span>
-              </div>
-            </div>
-
-            {/* Zona 2: Enlaces de navegación limpios */}
-            <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-              <span className="text-blue-600 border-b-2 border-blue-600 py-5 font-semibold">
-                Mis Solicitudes y Saldos
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  alert(
-                    'Política RH-04:\n• Solicitudes con anticipación mínima de 7 días naturales.\n• Los Días Flex no pueden tomarse de forma consecutiva ni adjuntos a puentes oficiales sin autorización previa.\n• Sincronización oficial de saldos generada vía Intelexion.'
-                  );
-                }}
-                className="text-gray-600 hover:text-gray-900 transition-colors py-5 cursor-pointer flex items-center gap-1"
-              >
-                <FileText className="w-4 h-4 text-gray-400" />
-                Políticas de Asistencia
-              </button>
-              <button
-                type="button"
-                onClick={handleSincronizarIntelexion}
-                className="text-gray-600 hover:text-gray-900 transition-colors py-5 cursor-pointer flex items-center gap-1.5"
-                title="Forzar actualización con base de datos Intelexion"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-gray-400 ${sincronizando ? 'animate-spin' : ''}`} />
-                <span>Sincronizar Intelexion</span>
-              </button>
-            </nav>
-
-            {/* Zona 3: Información de usuario y Salir */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2.5 text-right pl-3 border-l border-gray-200">
-                <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-semibold text-xs border border-gray-300">
-                  FC
+                <div className="text-sm font-bold text-gray-900 leading-tight">
+                  {colaborador.nombre}
                 </div>
-                <div className="hidden sm:block text-left">
-                  <div className="text-xs font-semibold text-gray-900 leading-tight">
-                    {colaborador.nombre}
-                  </div>
-                  <div className="text-[11px] text-gray-500">
-                    {colaborador.numEmpleado}
-                  </div>
+                <div className="text-xs text-gray-500 font-mono">
+                  No. Nómina: {colaborador.numEmpleado}
                 </div>
               </div>
               <button
                 onClick={handleLogout}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white hover:bg-gray-100 border border-gray-200 rounded transition-colors cursor-pointer"
+                className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-white hover:bg-gray-100 border border-gray-200 rounded transition-colors cursor-pointer"
                 title="Cerrar sesión actual"
               >
                 <LogOut className="w-3.5 h-3.5 text-gray-500" />
-                <span className="hidden sm:inline">Cerrar Sesión</span>
+                <span>Cerrar Sesión</span>
               </button>
             </div>
+
+            {/* Enlaces de navegación con pestañas Colaborador / Jefe Directo */}
+            <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+              <button
+                type="button"
+                onClick={() => setPestanaActiva('mis-solicitudes')}
+                className={`py-5 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  pestanaActiva === 'mis-solicitudes'
+                    ? 'text-blue-600 border-b-2 border-blue-600 font-semibold'
+                    : 'text-gray-600 hover:text-gray-900 border-b-2 border-transparent'
+                }`}
+              >
+                <span>Mis Solicitudes y Saldos</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPestanaActiva('aprobaciones')}
+                className={`py-5 transition-colors cursor-pointer flex items-center gap-2 ${
+                  pestanaActiva === 'aprobaciones'
+                    ? 'text-blue-600 border-b-2 border-blue-600 font-semibold'
+                    : 'text-gray-600 hover:text-gray-900 border-b-2 border-transparent'
+                }`}
+              >
+                <span>Aprobaciones</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                  {conteoPendientesJefe}
+                </span>
+                <span className="text-[11px] text-gray-500 font-normal">
+                  (Jefe Directo)
+                </span>
+              </button>
+            </nav>
           </div>
+        </div>
+
+        {/* Barra de Pestañas Móvil (Responsiva para teléfonos de jefes) */}
+        <div className="md:hidden border-t border-gray-200 px-4 py-2 flex items-center gap-2 bg-gray-50">
+          <button
+            type="button"
+            onClick={() => setPestanaActiva('mis-solicitudes')}
+            className={`flex-1 py-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer ${
+              pestanaActiva === 'mis-solicitudes'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-white text-gray-700 border border-gray-200'
+            }`}
+          >
+            Mis Solicitudes
+          </button>
+          <button
+            type="button"
+            onClick={() => setPestanaActiva('aprobaciones')}
+            className={`flex-1 py-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+              pestanaActiva === 'aprobaciones'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-white text-gray-700 border border-gray-200'
+            }`}
+          >
+            <span>Aprobaciones</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                pestanaActiva === 'aprobaciones'
+                  ? 'bg-white text-blue-700'
+                  : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {conteoPendientesJefe}
+            </span>
+          </button>
         </div>
       </header>
 
@@ -527,9 +584,12 @@ export default function App() {
           </div>
         )}
 
-        {/* ========================================================
-            SECCIÓN A: Resumen de Saldos (Lectura de "Intelexion" simulada)
-            ======================================================== */}
+        {/* Contenido condicional según la pestaña seleccionada */}
+        {pestanaActiva === 'mis-solicitudes' ? (
+          <>
+            {/* ========================================================
+                SECCIÓN A: Resumen de Saldos (Lectura de "Intelexion" simulada)
+                ======================================================== */}
         <section className="mb-8" aria-label="Resumen de Saldos">
           {/* Cabecera de perfil */}
           <div className="bg-white border border-gray-200 rounded-lg p-5 mb-5">
@@ -570,22 +630,6 @@ export default function App() {
                   <span className="text-[11px] text-gray-500">Antigüedad: {colaborador.antiguedad}</span>
                 </div>
               </div>
-            </div>
-
-            {/* Sincronización Intelexion */}
-            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Fuente de datos: <strong>Intelexion Nómina & RH</strong> (Última actualización: Hoy, 08:30 hrs)</span>
-              </div>
-              <button
-                onClick={handleSincronizarIntelexion}
-                disabled={sincronizando}
-                className="text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3 h-3 ${sincronizando ? 'animate-spin' : ''}`} />
-                <span>Actualizar saldos</span>
-              </button>
             </div>
           </div>
 
@@ -771,73 +815,124 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* Regla de Negocio Crítica (Lógica condicional de UI):
-                    Interruptor (toggle) o checkbox simulado que diga "Solicitar con saldo en 0 (Excepción)" */}
+                {/* Regla de Negocio: Modo Excepción */}
                 <div className="pt-2 border-t border-gray-100">
                   <div className="flex items-center justify-between">
                     <label
-                      htmlFor="toggle-saldo-cero"
-                      className="text-xs font-medium text-gray-900 cursor-pointer flex flex-col"
+                      htmlFor="toggle-modo-excepcion"
+                      className="text-xs font-medium text-gray-900 cursor-pointer flex flex-col pr-3"
                     >
-                      <span>Solicitar con saldo en 0 (Excepción)</span>
-                      <span className="text-[11px] text-gray-500 font-normal">
-                        Permite tramitar permisos sin saldo a cuenta de próximo período
+                      <span className="font-semibold text-gray-900 flex items-center gap-1.5">
+                        <span>Activar Modo Excepción</span>
+                        {isExceptionMode && (
+                          <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-semibold border border-amber-200">
+                            Activo
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-normal mt-0.5">
+                        Permite omitir reglas de anticipación, límite de días Flex o falta de saldo.
                       </span>
                     </label>
 
                     {/* Toggle Switch */}
                     <button
                       type="button"
-                      id="toggle-saldo-cero"
+                      id="toggle-modo-excepcion"
                       role="switch"
-                      aria-checked={solicitarSaldoCero}
-                      onClick={() => setSolicitarSaldoCero(!solicitarSaldoCero)}
-                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
-                        solicitarSaldoCero ? 'bg-blue-600' : 'bg-gray-200'
+                      aria-checked={isExceptionMode}
+                      onClick={() => setIsExceptionMode(!isExceptionMode)}
+                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${
+                        isExceptionMode ? 'bg-amber-500' : 'bg-gray-200'
                       }`}
                     >
                       <span
                         className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          solicitarSaldoCero ? 'translate-x-5' : 'translate-x-0'
+                          isExceptionMode ? 'translate-x-5' : 'translate-x-0'
                         }`}
                       />
                     </button>
                   </div>
                 </div>
 
-                {/* Si está activo o si el saldo simulado es 0, debe aparecer dinámicamente:
-                    "Motivo de la solicitud (Obligatorio para saldos en 0)" */}
-                {requiereMotivo && (
-                  <div className="pt-2 animate-fadeIn">
-                    <label
-                      htmlFor="motivo-solicitud"
-                      className="block text-xs font-semibold text-red-700 mb-1"
-                    >
-                      Motivo de la solicitud (Obligatorio para saldos en 0) *
-                    </label>
-                    <textarea
-                      id="motivo-solicitud"
-                      rows={3}
-                      required
-                      value={motivoSolicitud}
-                      onChange={(e) => setMotivoSolicitud(e.target.value)}
-                      placeholder="Indica la justificación de la excepción para revisión de RH y tu Jefatura..."
-                      className="w-full text-xs rounded border border-red-300 p-2 text-gray-900 placeholder-gray-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 bg-red-50/20"
-                    />
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      Esta solicitud requiere un visto bueno adicional de la Dirección de Recursos Humanos.
-                    </p>
+                {/* Campo de Justificación Obligatorio si isExceptionMode es true */}
+                {isExceptionMode && (
+                  <div className="pt-2 space-y-3 animate-fadeIn">
+                    {/* Banner de alerta requerido */}
+                    <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="leading-relaxed">
+                        Las solicitudes por excepción requieren revisión detallada y aprobación manual obligatoria por parte de tu Jefatura.
+                      </p>
+                    </div>
+
+                    {/* Textarea de Justificación (Obligatoria) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label
+                          htmlFor="justification"
+                          className="block text-xs font-semibold text-gray-700"
+                        >
+                          Justificación (Obligatoria) <span className="text-red-500">*</span>
+                        </label>
+                        <span
+                          className={`text-[10px] font-mono ${
+                            justification.trim().length >= 10
+                              ? 'text-emerald-600 font-semibold'
+                              : 'text-amber-700 font-medium'
+                          }`}
+                        >
+                          {justification.trim().length}/10 caracteres mín.
+                        </span>
+                      </div>
+                      <textarea
+                        id="justification"
+                        rows={3}
+                        required
+                        value={justification}
+                        onChange={(e) => setJustification(e.target.value)}
+                        placeholder="Describe el motivo extraordinario o de fuerza mayor para evaluación de tu Jefatura..."
+                        className="w-full text-xs rounded border border-amber-300 p-2.5 text-gray-900 placeholder-gray-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-amber-50/20"
+                      />
+                      {justification.trim().length > 0 && justification.trim().length < 10 && (
+                        <p className="text-[11px] text-amber-700 mt-1">
+                          Faltan {10 - justification.trim().length} caracter(es) para habilitar el envío.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
 
                 {/* Botón de envío requerido: "Enviar Solicitud al Jefe Directo" */}
                 <div className="pt-3">
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 px-4 border border-transparent rounded text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors cursor-pointer"
-                  >
-                    Enviar Solicitud al Jefe Directo
-                  </button>
+                  {(() => {
+                    const isSubmitDisabled = isExceptionMode && justification.trim().length < 10;
+                    return (
+                      <>
+                        <button
+                          type="submit"
+                          disabled={isSubmitDisabled}
+                          className={`w-full py-2.5 px-4 border rounded text-xs font-semibold transition-all duration-150 flex items-center justify-center gap-1.5 ${
+                            isSubmitDisabled
+                              ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed opacity-60'
+                              : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-transparent cursor-pointer shadow-sm'
+                          }`}
+                        >
+                          <span>Enviar Solicitud al Jefe Directo</span>
+                          {isExceptionMode && (
+                            <span className="text-[10px] bg-amber-500/20 text-amber-100 px-1.5 py-0.5 rounded font-mono">
+                              Excepción
+                            </span>
+                          )}
+                        </button>
+                        {isSubmitDisabled && (
+                          <p className="text-[11px] text-gray-500 text-center mt-1.5">
+                            El botón se habilitará al completar la justificación obligatoria (mínimo 10 caracteres).
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </form>
             </div>
@@ -1015,7 +1110,20 @@ export default function App() {
             </div>
           </section>
         </div>
-      </main>
+      </>
+    ) : (
+      <ApprovalsView
+        currentUser={{
+          id: colaborador.numEmpleado,
+          name: colaborador.nombre,
+          email: loginEmail,
+          role: 'Supervisor / Jefe Directo',
+        }}
+        onToastFeedback={(tipo, texto) => setMensajeFeedback({ tipo, texto })}
+        onPendingCountChange={(cant) => setConteoPendientesJefe(cant)}
+      />
+    )}
+  </main>
 
       {/* ========================================================
           MODAL: Cancelar Solicitud (Reversar)
