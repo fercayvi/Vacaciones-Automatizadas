@@ -19,8 +19,10 @@ import {
   ArrowRight,
   ShieldCheck,
   MessageSquare,
-  Key
+  Key,
+  Info
 } from 'lucide-react';
+import MinimalAlertModal, { AlertModalState } from './MinimalAlertModal';
 
 export interface CurrentUser {
   id: string;
@@ -70,6 +72,66 @@ interface ApprovalsViewProps {
   // Estado inicial opcional de solicitudes o callback cuando cambie el conteo
   onPendingCountChange?: (count: number) => void;
 }
+
+// Datos simulados para el Calendario de Ausencias del Equipo (Octubre 2026)
+const DIAS_CALENDARIO_EQUIPO = [
+  { dia: 28, mesActual: false, ausencias: [] },
+  { dia: 29, mesActual: false, ausencias: [] },
+  { dia: 30, mesActual: false, ausencias: [] },
+  { dia: 1, mesActual: true, ausencias: [] },
+  { dia: 2, mesActual: true, ausencias: [] },
+  { dia: 3, mesActual: true, ausencias: [] },
+  { dia: 4, mesActual: true, ausencias: [] },
+  { dia: 5, mesActual: true, ausencias: [] },
+  { dia: 6, mesActual: true, ausencias: [] },
+  { dia: 7, mesActual: true, ausencias: [] },
+  { dia: 8, mesActual: true, ausencias: [{ nombre: 'C. Rivera', tipo: 'aprobado' }] },
+  { dia: 9, mesActual: true, ausencias: [{ nombre: 'C. Rivera', tipo: 'aprobado' }] },
+  { dia: 10, mesActual: true, ausencias: [] },
+  { dia: 11, mesActual: true, ausencias: [] },
+  { dia: 12, mesActual: true, ausencias: [] },
+  { dia: 13, mesActual: true, ausencias: [] },
+  { dia: 14, mesActual: true, ausencias: [{ nombre: 'S. Valenzuela', tipo: 'aprobado' }] },
+  {
+    dia: 15,
+    mesActual: true,
+    ausencias: [
+      { nombre: 'S. Valenzuela', tipo: 'aprobado' },
+      { nombre: 'A. Morales', tipo: 'pendiente' },
+    ],
+  },
+  {
+    dia: 16,
+    mesActual: true,
+    ausencias: [
+      { nombre: 'S. Valenzuela', tipo: 'aprobado' },
+      { nombre: 'A. Morales', tipo: 'pendiente' },
+    ],
+  },
+  { dia: 17, mesActual: true, ausencias: [] },
+  { dia: 18, mesActual: true, ausencias: [] },
+  { dia: 19, mesActual: true, ausencias: [] },
+  { dia: 20, mesActual: true, ausencias: [] },
+  { dia: 21, mesActual: true, ausencias: [] },
+  { dia: 22, mesActual: true, ausencias: [{ nombre: 'D. Gutiérrez', tipo: 'pendiente' }] },
+  {
+    dia: 23,
+    mesActual: true,
+    ausencias: [
+      { nombre: 'D. Gutiérrez', tipo: 'pendiente' },
+      { nombre: 'E. Luna', tipo: 'aprobado' },
+    ],
+  },
+  { dia: 24, mesActual: true, ausencias: [] },
+  { dia: 25, mesActual: true, ausencias: [] },
+  { dia: 26, mesActual: true, ausencias: [] },
+  { dia: 27, mesActual: true, ausencias: [] },
+  { dia: 28, mesActual: true, ausencias: [] },
+  { dia: 29, mesActual: true, ausencias: [{ nombre: 'M. Ramos', tipo: 'aprobado' }] },
+  { dia: 30, mesActual: true, ausencias: [{ nombre: 'M. Ramos', tipo: 'aprobado' }] },
+  { dia: 31, mesActual: true, ausencias: [] },
+  { dia: 1, mesActual: false, ausencias: [] },
+];
 
 export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
   currentUser: propCurrentUser,
@@ -235,8 +297,13 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     },
   ]);
 
-  // Mensaje Toast local para notificaciones inmediatas
-  const [toast, setToast] = useState<{ tipo: 'exito' | 'error' | 'info'; mensaje: string } | null>(null);
+  // Modal de Alerta Minimalista Unificado
+  const [alertModal, setAlertModal] = useState<AlertModalState>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
 
   // Filtros
   const [tabActual, setTabActual] = useState<'pendientes' | 'cancelaciones' | 'historial'>('pendientes');
@@ -262,30 +329,27 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
   const [activeTokens, setActiveTokens] = useState<string[]>(['Mariana Rivas']);
   const [selectedCollaborator, setSelectedCollaborator] = useState<string>('Sofía Valenzuela');
 
-  const dispararToast = (tipo: 'exito' | 'error' | 'info', mensaje: string) => {
-    setToast({ tipo, mensaje });
-    if (onToastFeedback) {
-      onToastFeedback(tipo, mensaje);
-    }
-    setTimeout(() => {
-      setToast(null);
-    }, 5500);
-  };
-
   const handleGenerarPase = () => {
     if (!selectedCollaborator) return;
     if (!activeTokens.includes(selectedCollaborator)) {
       setActiveTokens((prev) => [...prev, selectedCollaborator]);
     }
-    dispararToast(
-      'exito',
-      'Pase generado exitosamente. El colaborador ya puede usar el formulario de excepción.'
-    );
+    setAlertModal({
+      isOpen: true,
+      title: 'Pase Generado',
+      message: 'Pase Generado. El colaborador tiene 24 horas para utilizarlo.',
+      type: 'success',
+    });
   };
 
   const handleRevocarPase = (colaboradorNombre: string) => {
     setActiveTokens((prev) => prev.filter((item) => item !== colaboradorNombre));
-    dispararToast('info', `Pase de excepción para ${colaboradorNombre} revocado.`);
+    setAlertModal({
+      isOpen: true,
+      title: 'Pase Revocado',
+      message: 'El pase de excepción ha sido revocado correctamente.',
+      type: 'info',
+    });
   };
 
   // LÓGICA DE ESTADO (PASO 5: APROBAR)
@@ -310,11 +374,12 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       )
     );
 
-    // Mensaje de éxito exacto según la especificación:
-    dispararToast(
-      'exito',
-      'Solicitud aprobada. El sistema descontará los días del saldo visible del colaborador'
-    );
+    setAlertModal({
+      isOpen: true,
+      title: 'Solicitud Aprobada',
+      message: 'El saldo del colaborador ha sido actualizado.',
+      type: 'success',
+    });
   };
 
   // LÓGICA: APROBAR CANCELACIÓN
@@ -342,10 +407,12 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       )
     );
 
-    dispararToast(
-      'exito',
-      `Cancelación aprobada. Se han reintegrado ${sol.dias} día(s) al saldo visible del colaborador.`
-    );
+    setAlertModal({
+      isOpen: true,
+      title: 'Cancelación Aprobada',
+      message: 'El saldo del colaborador ha sido actualizado y los días han sido reembolsados.',
+      type: 'success',
+    });
   };
 
   // LÓGICA: RECHAZAR CANCELACIÓN
@@ -370,10 +437,12 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       )
     );
 
-    dispararToast(
-      'info',
-      'Solicitud de cancelación rechazada. La vacación se mantiene activa y los días continúan descontados.'
-    );
+    setAlertModal({
+      isOpen: true,
+      title: 'Cancelación Rechazada',
+      message: 'La vacación se mantiene activa y los días continúan reservados.',
+      type: 'info',
+    });
   };
 
   // Abrir Modal de Rechazo pasando el ID de la solicitud
@@ -395,12 +464,11 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       year: 'numeric',
     });
 
-    const solActual = solicitudes.find((s) => s.id === rejectionModal.requestId);
-    const nombreColab = solActual ? solActual.colaboradorNombre : 'el colaborador';
+    const reqId = rejectionModal.requestId;
 
     setSolicitudes((prev) =>
       prev.map((item) =>
-        item.id === rejectionModal.requestId
+        item.id === reqId
           ? {
               ...item,
               estatus: 'Rechazada',
@@ -411,15 +479,17 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       )
     );
 
-    dispararToast(
-      'error',
-      `Solicitud ${rejectionModal.requestId} rechazada. Se ha notificado por correo a ${nombreColab} con el motivo indicado.`
-    );
-
     setRejectionModal({
       isOpen: false,
       requestId: null,
       reason: '',
+    });
+
+    setAlertModal({
+      isOpen: true,
+      title: 'Solicitud Rechazada',
+      message: 'Se ha notificado el motivo del rechazo al colaborador.',
+      type: 'error',
     });
   };
 
@@ -478,40 +548,6 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification Flotante / Banner superior */}
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className={`p-4 rounded-lg border text-sm flex items-start justify-between shadow-xs transition-all ${
-            toast.tipo === 'exito'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-              : toast.tipo === 'error'
-              ? 'bg-red-50 border-red-300 text-red-900'
-              : 'bg-blue-50 border-blue-300 text-blue-900'
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            {toast.tipo === 'exito' && (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
-            )}
-            {toast.tipo === 'error' && (
-              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
-            )}
-            {toast.tipo === 'info' && (
-              <Clock className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-            )}
-            <div className="font-medium">{toast.mensaje}</div>
-          </div>
-          <button
-            onClick={() => setToast(null)}
-            className="text-xs font-semibold opacity-70 hover:opacity-100 ml-4 cursor-pointer"
-          >
-            Cerrar
-          </button>
-        </div>
-      )}
-
       {/* Métricas rápidas */}
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1144,12 +1180,92 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     )}
 
       {/* ========================================================
+          SECCIÓN: Calendario de Ausencias del Equipo
+          ======================================================== */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 shrink-0">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">
+                Calendario de Ausencias (Octubre 2026)
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Supervisión mensual de descansos programados y detección temprana de empalmes.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shrink-0" />
+              <span className="text-gray-600 font-medium">Pendientes</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block shrink-0" />
+              <span className="text-gray-600 font-medium">Aprobadas</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Cuadrícula del Calendario (Grid) */}
+        <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden">
+          {/* Fila de días: Lunes a Domingo */}
+          {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((dia) => (
+            <div
+              key={dia}
+              className="bg-gray-50 text-xs font-medium text-gray-500 text-center py-2"
+            >
+              {dia}
+            </div>
+          ))}
+
+          {/* Celdas (Días) */}
+          {DIAS_CALENDARIO_EQUIPO.map((celda, idx) => (
+            <div
+              key={idx}
+              className={`bg-white h-24 p-1 flex flex-col gap-1 overflow-y-auto ${
+                !celda.mesActual ? 'bg-gray-50/40' : ''
+              }`}
+            >
+              <div className="text-right">
+                <span
+                  className={`text-xs font-medium ${
+                    celda.mesActual ? 'text-gray-400' : 'text-gray-300'
+                  }`}
+                >
+                  {celda.dia}
+                </span>
+              </div>
+              {celda.ausencias.map((ausencia, aIdx) => (
+                <div
+                  key={aIdx}
+                  className={`${
+                    ausencia.tipo === 'pendiente'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-green-100 text-green-800'
+                  } text-[10px] px-1.5 py-0.5 rounded truncate font-medium`}
+                  title={`${ausencia.nombre} (${
+                    ausencia.tipo === 'pendiente' ? 'Pendiente' : 'Aprobada'
+                  })`}
+                >
+                  {ausencia.nombre}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ========================================================
           SECCIÓN: Herramientas de Jefatura (Zona Administrativa Secundaria)
           ======================================================== */}
       <div className="pt-2">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Herramientas de Jefatura
+             
           </span>
           <div className="h-px bg-gray-200 flex-1" />
         </div>
@@ -1366,6 +1482,15 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Alerta Minimalista Unificado */}
+      <MinimalAlertModal
+        isOpen={alertModal.isOpen}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        onClose={() => setAlertModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

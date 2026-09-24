@@ -18,6 +18,8 @@ import {
   X
 } from 'lucide-react';
 import ApprovalsView from './ApprovalsView';
+import NewRequestForm from './NewRequestForm';
+import MinimalAlertModal, { AlertModalState } from './MinimalAlertModal';
 
 interface Solicitud {
   id: string;
@@ -41,20 +43,20 @@ export default function App() {
   const [conteoPendientesJefe, setConteoPendientesJefe] = useState(4);
 
   // Estado del Formulario de Login
-  const [loginEmail, setLoginEmail] = useState('fecarrillo@ayvi.com.mx');
+  const [loginEmail, setLoginEmail] = useState('Ejemplo@ayvi.com.mx');
   const [loginPassword, setLoginPassword] = useState('••••••••••');
 
   // Datos del colaborador (Intelexion HR)
   const colaborador = {
     nombre: 'Fernando Carrillo',
-    puesto: 'Desarrollador Senior Frontend',
+    puesto: 'Analista de Compensaciones',
     numEmpleado: 'EMP-04829',
-    jefeDirecto: 'Lic. Rodrigo Mendoza',
-    puestoJefe: 'Director de Ingeniería y TI',
+    jefeDirecto: 'Emmanuel Muñoz',
+    puestoJefe: 'Gerente de Centro de Servicios',
     fechaAniversario: '14 de Marzo, 2021',
     antiguedad: '3 años, 6 meses',
-    departamento: 'Tecnología e Innovación Digital',
-    empresa: 'Grupo Ayvi Soluciones S.A. de C.V.',
+    departamento: 'Compensaciones',
+    empresa: 'Ayvi',
   };
 
   // Saldos base
@@ -162,39 +164,47 @@ export default function App() {
     .reduce((acc, curr) => acc + curr.dias, 0);
   const saldoFlexCalculado = Math.max(0, diasFlexAsignados - diasFlexUsados);
 
-  // Estado del formulario de Nueva Solicitud
-  const [tipoSeleccionado, setTipoSeleccionado] = useState<'Vacaciones' | 'Día Flex'>('Vacaciones');
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
-  const [isExceptionMode, setIsExceptionMode] = useState(false);
-  const [justification, setJustification] = useState('');
-  const [mensajeFeedback, setMensajeFeedback] = useState<{ tipo: 'exito' | 'error' | 'info'; texto: string } | null>(null);
+  // Estado de modales y alertas minimalistas
+  const [alertModal, setAlertModal] = useState<AlertModalState>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
   const [sincronizando, setSincronizando] = useState(false);
   const [modalEdicion, setModalEdicion] = useState<Solicitud | null>(null);
   const [modalConfirmarReversar, setModalConfirmarReversar] = useState<Solicitud | null>(null);
   const [modalTabuladorVacaciones, setModalTabuladorVacaciones] = useState(false);
   const [modalPoliticaFlex, setModalPoliticaFlex] = useState(false);
+  const [isReportManagerOpen, setIsReportManagerOpen] = useState(false);
+  const [reportedManagerName, setReportedManagerName] = useState('');
   const [filtroEstatus, setFiltroEstatus] = useState<'todos' | 'pendientes' | 'aprobados'>('todos');
-  const [formError, setFormError] = useState<string | null>(null);
+
+  // Reportar error de jefe directo
+  const handleSendReportManager = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!reportedManagerName.trim()) return;
+
+    setIsReportManagerOpen(false);
+    setReportedManagerName('');
+
+    setAlertModal({
+      isOpen: true,
+      title: 'Reporte Enviado',
+      message: 'Se ha notificado a TyC y a tu jefe actual para actualizar tu línea de reporte. Te avisaremos cuando se aplique el cambio.',
+      type: 'success',
+    });
+  };
 
   // Manejador del Login
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Al hacer clic, sin importar lo que se escriba, cambia a la Vista 2
     setVistaActual('dashboard');
-    setMensajeFeedback({
-      tipo: 'info',
-      texto: 'Bienvenido de nuevo, Fernando. Sesión iniciada con credenciales corporativas.',
-    });
-    setTimeout(() => {
-      setMensajeFeedback(null);
-    }, 4500);
   };
 
   // Manejador de Cerrar Sesión
   const handleLogout = () => {
     setVistaActual('login');
-    setMensajeFeedback(null);
   };
 
   // Cálculo de días estimados entre fechaInicio y fechaFin
@@ -217,8 +227,6 @@ export default function App() {
     return diasCount === 0 ? 1 : diasCount;
   };
 
-  const diasCalculados = calcularDiasHabiles(fechaInicio, fechaFin);
-
   // Formatear fechas para mostrar en la tabla (ej. 10/Oct - 15/Oct)
   const formatearRangoFechas = (inicio: string, fin: string) => {
     if (!inicio) return 'Fecha por definir';
@@ -229,134 +237,6 @@ export default function App() {
     const d2 = new Date(fin + 'T00:00:00');
     const txt2 = `${d2.getDate()}/${meses[d2.getMonth()]}`;
     return `${txt1} - ${txt2}`;
-  };
-
-  // Enviar Nueva Solicitud
-  const handleEnviarSolicitud = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-
-    if (!fechaInicio) {
-      setMensajeFeedback({ tipo: 'error', texto: 'Por favor selecciona la fecha de inicio.' });
-      return;
-    }
-
-    // Regla Días Flex: Calcular diferencia entre fecha de inicio y fecha de fin
-    if (tipoSeleccionado === 'Día Flex') {
-      const fechaFinEfectiva = fechaFin || fechaInicio;
-      const dInicio = new Date(fechaInicio + 'T00:00:00');
-      const dFin = new Date(fechaFinEfectiva + 'T00:00:00');
-      const diffTime = dFin.getTime() - dInicio.getTime();
-      const diffDias = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
-      if (diffDias > 1) {
-        setFormError(
-          'Error: Los Días Flex son individuales y no pueden tomarse de forma consecutiva. Selecciona solo un día.'
-        );
-        return;
-      }
-    }
-
-    if (tipoSeleccionado === 'Vacaciones' && !fechaFin) {
-      setMensajeFeedback({ tipo: 'error', texto: 'Por favor selecciona la fecha de fin de vacaciones.' });
-      return;
-    }
-
-    const finFinal = tipoSeleccionado === 'Día Flex' ? fechaInicio : fechaFin;
-    const diasTotal = tipoSeleccionado === 'Día Flex' ? 1 : diasCalculados;
-
-    if (diasTotal <= 0) {
-      setMensajeFeedback({ tipo: 'error', texto: 'El rango de fechas seleccionado no contiene días hábiles válidos.' });
-      return;
-    }
-
-    // LÓGICA DE VALIDACIÓN (Reglas Normales vs Modo Excepción):
-    if (!isExceptionMode) {
-      // Regla 1: Validar que la fecha de inicio sea al menos 7 días desde hoy
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      const inicioDate = new Date(fechaInicio + 'T00:00:00');
-      const diffTime = inicioDate.getTime() - hoy.getTime();
-      const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      if (diffDias < 7) {
-        setMensajeFeedback({
-          tipo: 'error',
-          texto: 'Las solicitudes regulares requieren al menos 7 días de anticipación. Para tramitar con menor tiempo, activa el Modo Excepción.',
-        });
-        return;
-      }
-
-      // Regla 2: Validar que el saldo sea suficiente
-      const saldoDisponible = tipoSeleccionado === 'Vacaciones' ? saldoVacacionesCalculado : saldoFlexCalculado;
-      if (diasTotal > saldoDisponible) {
-        setMensajeFeedback({
-          tipo: 'error',
-          texto: `Saldo insuficiente (${saldoDisponible} ${saldoDisponible === 1 ? 'día disponible' : 'días disponibles'} vs ${diasTotal} solicitados). Para tramitar sin saldo, activa el Modo Excepción.`,
-        });
-        return;
-      }
-
-      // Regla 3: No permitir Días Flex consecutivos
-      if (tipoSeleccionado === 'Día Flex') {
-        const tieneConsecutivo = solicitudes.some((s) => {
-          if (s.tipo !== 'Día Flex' || s.estatus === 'Cancelada (Reversada)') return false;
-          const sDate = new Date(s.fechaInicio + 'T00:00:00');
-          const diff = Math.abs(Math.round((inicioDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)));
-          return diff <= 1;
-        });
-
-        if (tieneConsecutivo) {
-          setMensajeFeedback({
-            tipo: 'error',
-            texto: 'Por política de la empresa no se permiten Días Flex consecutivos. Para casos extraordinarios, activa el Modo Excepción.',
-          });
-          return;
-        }
-      }
-    } else {
-      // Modo Excepción: Se omiten las reglas de anticipación, saldos y días consecutivos.
-      // Pero la justificación es obligatoria y debe tener al menos 10 caracteres.
-      if (!justification || justification.trim().length < 10) {
-        setMensajeFeedback({
-          tipo: 'error',
-          texto: 'La justificación es obligatoria para el Modo Excepción y debe tener al menos 10 caracteres.',
-        });
-        return;
-      }
-    }
-
-    // Crear solicitud
-    const nuevaSol: Solicitud = {
-      id: `SOL-2026-00${solicitudes.length + 2}`,
-      tipo: tipoSeleccionado,
-      fechas: formatearRangoFechas(fechaInicio, finFinal),
-      fechaInicio: fechaInicio,
-      fechaFin: finFinal,
-      dias: diasTotal,
-      estatus: 'Pendiente de Aprobación (Jefe)',
-      esExcepcion: isExceptionMode,
-      motivo: isExceptionMode ? justification.trim() : undefined,
-      fechaRegistro: 'Hoy',
-    };
-
-    setSolicitudes([nuevaSol, ...solicitudes]);
-    setMensajeFeedback({
-      tipo: 'exito',
-      texto: isExceptionMode
-        ? `Solicitud por Excepción ${nuevaSol.id} registrada. Enviada a ${colaborador.jefeDirecto} para su revisión manual obligatoria.`
-        : `Solicitud ${nuevaSol.id} registrada con éxito. Notificación enviada a ${colaborador.jefeDirecto} para su revisión.`,
-    });
-
-    // Reset de formulario
-    setFechaInicio('');
-    setFechaFin('');
-    setJustification('');
-    setIsExceptionMode(false);
-
-    setTimeout(() => {
-      setMensajeFeedback(null);
-    }, 6000);
   };
 
   // Fecha actual del sistema para validación de vigencia (23 de Septiembre de 2026)
@@ -382,11 +262,12 @@ export default function App() {
       )
     );
     setModalConfirmarReversar(null);
-    setMensajeFeedback({
-      tipo: 'info',
-      texto: `Solicitud de cancelación para ${sol.id} enviada a ${colaborador.jefeDirecto} para su revisión.`,
+    setAlertModal({
+      isOpen: true,
+      title: 'Cancelación Solicitada',
+      message: `Tu solicitud de cancelación para ${sol.id} fue turnada a ${colaborador.jefeDirecto} para su revisión.`,
+      type: 'info',
     });
-    setTimeout(() => setMensajeFeedback(null), 5000);
   };
 
   // Reversar / Cancelar solicitud aprobada (fallback directo para administradores)
@@ -397,11 +278,12 @@ export default function App() {
       )
     );
     setModalConfirmarReversar(null);
-    setMensajeFeedback({
-      tipo: 'info',
-      texto: `La solicitud ${sol.id} (${sol.tipo}) ha sido cancelada y los días correspondientes fueron reversados a tu saldo.`,
+    setAlertModal({
+      isOpen: true,
+      title: 'Solicitud Cancelada',
+      message: `La solicitud ${sol.id} (${sol.tipo}) ha sido cancelada y los días correspondientes fueron devueltos a tu saldo.`,
+      type: 'info',
     });
-    setTimeout(() => setMensajeFeedback(null), 5000);
   };
 
   // Guardar edición de solicitud pendiente
@@ -410,11 +292,12 @@ export default function App() {
       solicitudes.map((item) => (item.id === solActualizada.id ? solActualizada : item))
     );
     setModalEdicion(null);
-    setMensajeFeedback({
-      tipo: 'exito',
-      texto: `Solicitud ${solActualizada.id} actualizada correctamente.`,
+    setAlertModal({
+      isOpen: true,
+      title: 'Solicitud Actualizada',
+      message: `Los cambios para la solicitud ${solActualizada.id} han sido guardados correctamente.`,
+      type: 'success',
     });
-    setTimeout(() => setMensajeFeedback(null), 4000);
   };
 
   // Simulación de sincronización con Intelexion
@@ -422,11 +305,12 @@ export default function App() {
     setSincronizando(true);
     setTimeout(() => {
       setSincronizando(false);
-      setMensajeFeedback({
-        tipo: 'exito',
-        texto: 'Saldos y registros sincronizados exitosamente con Intelexion HR v24.9.',
+      setAlertModal({
+        isOpen: true,
+        title: 'Sincronización Exitosa',
+        message: 'Saldos y registros sincronizados exitosamente con Intelexion HR v24.9.',
+        type: 'success',
       });
-      setTimeout(() => setMensajeFeedback(null), 4000);
     }, 800);
   };
 
@@ -643,38 +527,6 @@ export default function App() {
 
       {/* Contenedor Principal */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Banner de Feedback / Alertas del sistema */}
-        {mensajeFeedback && (
-          <div
-            className={`mb-6 p-4 rounded border text-sm flex items-start justify-between ${
-              mensajeFeedback.tipo === 'exito'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : mensajeFeedback.tipo === 'error'
-                ? 'bg-red-50 border-red-200 text-red-900'
-                : 'bg-blue-50 border-blue-200 text-blue-900'
-            }`}
-          >
-            <div className="flex items-start gap-2.5">
-              {mensajeFeedback.tipo === 'exito' && (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
-              )}
-              {mensajeFeedback.tipo === 'error' && (
-                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
-              )}
-              {mensajeFeedback.tipo === 'info' && (
-                <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-              )}
-              <span>{mensajeFeedback.texto}</span>
-            </div>
-            <button
-              onClick={() => setMensajeFeedback(null)}
-              className="text-xs opacity-60 hover:opacity-100 cursor-pointer ml-4 font-semibold"
-            >
-              Cerrar
-            </button>
-          </div>
-        )}
-
         {/* Contenido condicional según la pestaña seleccionada */}
         {pestanaActiva === 'mis-solicitudes' ? (
           <>
@@ -712,6 +564,16 @@ export default function App() {
                     {colaborador.jefeDirecto}
                   </span>
                   <span className="text-[11px] text-gray-500">{colaborador.puestoJefe}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportedManagerName('');
+                      setIsReportManagerOpen(true);
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline mt-2 cursor-pointer text-right w-full block"
+                  >
+                    ¿No es tu jefe directo?
+                  </button>
                 </div>
                 <div className="bg-gray-50 border border-gray-200 rounded p-2.5">
                   <span className="text-gray-500 block font-medium">Fecha de Aniversario:</span>
@@ -851,248 +713,15 @@ export default function App() {
               SECCIÓN B: Nueva Solicitud (Formulario Inteligente)
               ======================================================== */}
           <section className="lg:col-span-5" aria-label="Nueva Solicitud">
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <div className="border-b border-gray-100 pb-3 mb-5">
-                <h3 className="text-base font-bold text-gray-900">
-                  Nueva Solicitud
-                </h3>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Completa el formulario para enviar a revisión de tu jefatura.
-                </p>
-              </div>
-
-              <form onSubmit={handleEnviarSolicitud} className="space-y-4">
-                {/* Selector de Tipo: "Vacaciones" o "Día Flex" */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-700 mb-1.5">
-                    Tipo de Solicitud
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTipoSeleccionado('Vacaciones');
-                        if (formError) setFormError(null);
-                      }}
-                      className={`py-2 px-3 text-xs font-medium rounded border text-center transition-colors cursor-pointer ${
-                        tipoSeleccionado === 'Vacaciones'
-                          ? 'bg-blue-50 border-blue-600 text-blue-700 font-semibold'
-                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      Vacaciones
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTipoSeleccionado('Día Flex');
-                        if (formError) setFormError(null);
-                      }}
-                      className={`py-2 px-3 text-xs font-medium rounded border text-center transition-colors cursor-pointer ${
-                        tipoSeleccionado === 'Día Flex'
-                          ? 'bg-blue-50 border-blue-600 text-blue-700 font-semibold'
-                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      Día Flex
-                    </button>
-                  </div>
-                </div>
-
-                {/* Selector de Fechas: Inicio y Fin */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label
-                      htmlFor="fecha-inicio"
-                      className="block text-xs font-medium text-gray-700 mb-1"
-                    >
-                      Fecha de inicio
-                    </label>
-                    <input
-                      id="fecha-inicio"
-                      type="date"
-                      required
-                      value={fechaInicio}
-                      onChange={(e) => {
-                        setFechaInicio(e.target.value);
-                        if (tipoSeleccionado === 'Día Flex' && !fechaFin) {
-                          setFechaFin(e.target.value);
-                        }
-                        if (formError) setFormError(null);
-                      }}
-                      className="w-full text-xs rounded border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="fecha-fin"
-                      className="block text-xs font-medium text-gray-700 mb-1"
-                    >
-                      Fecha de fin {tipoSeleccionado === 'Día Flex' && <span className="text-gray-400 font-normal">(individual)</span>}
-                    </label>
-                    <input
-                      id="fecha-fin"
-                      type="date"
-                      required={tipoSeleccionado === 'Vacaciones'}
-                      value={tipoSeleccionado === 'Día Flex' ? (fechaFin || fechaInicio) : fechaFin}
-                      onChange={(e) => {
-                        setFechaFin(e.target.value);
-                        if (formError) setFormError(null);
-                      }}
-                      min={fechaInicio || undefined}
-                      className="w-full text-xs rounded border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
-                    />
-                  </div>
-                </div>
-
-                {/* Cálculo de días solicitados en vivo */}
-                {fechaInicio && (
-                  <div className="text-xs bg-gray-50 border border-gray-200 rounded p-2 flex items-center justify-between text-gray-700 font-mono">
-                    <span>Días laborales a solicitar:</span>
-                    <span className="font-bold text-gray-900">
-                      {tipoSeleccionado === 'Día Flex' ? '1 día' : `${diasCalculados} día(s)`}
-                    </span>
-                  </div>
-                )}
-
-                {/* Nota visual requerida debajo de las fechas */}
-                <div className="rounded border border-blue-100 bg-blue-50/60 p-3 text-xs text-blue-900 flex items-start gap-2">
-                  <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed">
-                    Las solicitudes requieren 7 días de anticipación. No se permiten días Flex consecutivos.
-                  </p>
-                </div>
-
-                {/* Regla de Negocio: Modo Excepción */}
-                <div className="pt-2 border-t border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <label
-                      htmlFor="toggle-modo-excepcion"
-                      className="text-xs font-medium text-gray-900 cursor-pointer flex flex-col pr-3"
-                    >
-                      <span className="font-semibold text-gray-900 flex items-center gap-1.5">
-                        <span>Activar Modo Excepción</span>
-                        {isExceptionMode && (
-                          <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-semibold border border-amber-200">
-                            Activo
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-[11px] text-gray-500 font-normal mt-0.5">
-                        Permite omitir reglas de anticipación, límite de días Flex o falta de saldo.
-                      </span>
-                    </label>
-
-                    {/* Toggle Switch */}
-                    <button
-                      type="button"
-                      id="toggle-modo-excepcion"
-                      role="switch"
-                      aria-checked={isExceptionMode}
-                      onClick={() => setIsExceptionMode(!isExceptionMode)}
-                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${
-                        isExceptionMode ? 'bg-amber-500' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          isExceptionMode ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Campo de Justificación Obligatorio si isExceptionMode es true */}
-                {isExceptionMode && (
-                  <div className="pt-2 space-y-3 animate-fadeIn">
-                    {/* Banner de alerta requerido */}
-                    <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <p className="leading-relaxed">
-                        Las solicitudes por excepción requieren revisión detallada y aprobación manual obligatoria por parte de tu Jefatura.
-                      </p>
-                    </div>
-
-                    {/* Textarea de Justificación (Obligatoria) */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label
-                          htmlFor="justification"
-                          className="block text-xs font-semibold text-gray-700"
-                        >
-                          Justificación (Obligatoria) <span className="text-red-500">*</span>
-                        </label>
-                        <span
-                          className={`text-[10px] font-mono ${
-                            justification.trim().length >= 10
-                              ? 'text-emerald-600 font-semibold'
-                              : 'text-amber-700 font-medium'
-                          }`}
-                        >
-                          {justification.trim().length}/10 caracteres mín.
-                        </span>
-                      </div>
-                      <textarea
-                        id="justification"
-                        rows={3}
-                        required
-                        value={justification}
-                        onChange={(e) => setJustification(e.target.value)}
-                        placeholder="Describe el motivo extraordinario o de fuerza mayor para evaluación de tu Jefatura..."
-                        className="w-full text-xs rounded border border-amber-300 p-2.5 text-gray-900 placeholder-gray-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 bg-amber-50/20"
-                      />
-                      {justification.trim().length > 0 && justification.trim().length < 10 && (
-                        <p className="text-[11px] text-amber-700 mt-1">
-                          Faltan {10 - justification.trim().length} caracter(es) para habilitar el envío.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Botón de envío requerido: "Enviar Solicitud al Jefe Directo" */}
-                <div className="pt-3">
-                  {(() => {
-                    const isSubmitDisabled = isExceptionMode && justification.trim().length < 10;
-                    return (
-                      <>
-                        <button
-                          type="submit"
-                          disabled={isSubmitDisabled}
-                          className={`w-full py-2.5 px-4 border rounded text-xs font-semibold transition-all duration-150 flex items-center justify-center gap-1.5 ${
-                            isSubmitDisabled
-                              ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed opacity-60'
-                              : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white border-transparent cursor-pointer shadow-sm'
-                          }`}
-                        >
-                          <span>Enviar Solicitud al Jefe Directo</span>
-                          {isExceptionMode && (
-                            <span className="text-[10px] bg-amber-500/20 text-amber-100 px-1.5 py-0.5 rounded font-mono">
-                              Excepción
-                            </span>
-                          )}
-                        </button>
-                        {isSubmitDisabled && (
-                          <p className="text-[11px] text-gray-500 text-center mt-1.5">
-                            El botón se habilitará al completar la justificación obligatoria (mínimo 10 caracteres).
-                          </p>
-                        )}
-
-                        {/* Banner de error de validación visual para Días Flex u otras reglas */}
-                        {formError && (
-                          <div className="mt-3 bg-red-50 text-red-700 border-l-4 border-red-500 p-3 rounded text-xs flex items-start gap-2 animate-fadeIn">
-                            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                            <span className="font-medium leading-relaxed">{formError}</span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              </form>
-            </div>
+            <NewRequestForm
+              saldoVacacionesCalculado={saldoVacacionesCalculado}
+              saldoFlexCalculado={saldoFlexCalculado}
+              solicitudesExistentes={solicitudes}
+              jefeDirecto={colaborador.jefeDirecto}
+              onSolicitudCreada={(nuevaSol) => {
+                setSolicitudes([nuevaSol, ...solicitudes]);
+              }}
+            />
           </section>
 
           {/* ========================================================
@@ -1302,7 +931,6 @@ export default function App() {
           email: loginEmail,
           role: 'Supervisor / Jefe Directo',
         }}
-        onToastFeedback={(tipo, texto) => setMensajeFeedback({ tipo, texto })}
         onPendingCountChange={(cant) => setConteoPendientesJefe(cant)}
       />
     )}
@@ -1482,11 +1110,14 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     // Descartar solicitud
-                    setSolicitudes(solicitudes.filter((s) => s.id !== modalEdicion.id));
+                    const idEliminada = modalEdicion.id;
+                    setSolicitudes(solicitudes.filter((s) => s.id !== idEliminada));
                     setModalEdicion(null);
-                    setMensajeFeedback({
-                      tipo: 'info',
-                      texto: `Solicitud ${modalEdicion.id} eliminada.`,
+                    setAlertModal({
+                      isOpen: true,
+                      title: 'Solicitud Eliminada',
+                      message: `La solicitud ${idEliminada} fue eliminada correctamente.`,
+                      type: 'info',
                     });
                   }}
                   className="text-xs text-red-600 hover:text-red-800 font-medium hover:underline cursor-pointer"
@@ -1686,6 +1317,79 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ========================================================
+          MODAL: Reportar error en Jefatura
+          ======================================================== */}
+      {isReportManagerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4 animate-fadeIn"
+          onClick={() => setIsReportManagerOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md border border-gray-100 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-4">
+              <h4 className="text-lg font-bold text-gray-800">
+                Reportar error en Jefatura
+              </h4>
+              <button
+                type="button"
+                onClick={() => setIsReportManagerOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded transition-colors cursor-pointer"
+                aria-label="Cerrar modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">
+              Si tu jefe directo no está actualizado, tus solicitudes podrían retrasarse. Por favor, indícanos el nombre de tu líder actual para que TyC lo actualice.
+            </p>
+
+            <form onSubmit={handleSendReportManager}>
+              <div className="mb-5">
+                <input
+                  type="text"
+                  required
+                  value={reportedManagerName}
+                  onChange={(e) => setReportedManagerName(e.target.value)}
+                  placeholder="Nombre de tu jefe correcto..."
+                  className="w-full border border-gray-300 rounded-lg px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsReportManagerOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!reportedManagerName.trim()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors cursor-pointer"
+                >
+                  Enviar Reporte
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Alerta Minimalista Unificado */}
+      <MinimalAlertModal
+        isOpen={alertModal.isOpen}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        onClose={() => setAlertModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
