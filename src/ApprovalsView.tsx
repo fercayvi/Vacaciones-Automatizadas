@@ -12,6 +12,8 @@ import {
   Search,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   Building,
   Briefcase,
@@ -54,7 +56,14 @@ export interface SolicitudSubordinado {
   saldoDisponible: number; // Saldo de días hábiles disponibles antes de la solicitud
   comentarios?: string | null; // Justificación o notas adjuntas por el colaborador
   fechaSolicitud: string;
-  estatus: 'Pendiente' | 'Aprobada' | 'Rechazada' | 'Pendiente de Cancelación (Jefe)' | 'Cancelada' | 'Cancelado';
+  estatus:
+    | 'Pendiente'
+    | 'Aprobada'
+    | 'Rechazada'
+    | 'Pendiente de Cancelación (Jefe)'
+    | 'Cancelada'
+    | 'Cancelado'
+    | 'Expirado por Sistema';
   esCancelacion?: boolean;
   saldoActualVacaciones?: number;
   esExcepcion?: boolean;
@@ -73,64 +82,197 @@ interface ApprovalsViewProps {
   onPendingCountChange?: (count: number) => void;
 }
 
-// Datos simulados para el Calendario de Ausencias del Equipo (Octubre 2026)
-const DIAS_CALENDARIO_EQUIPO = [
-  { dia: 28, mesActual: false, ausencias: [] },
-  { dia: 29, mesActual: false, ausencias: [] },
-  { dia: 30, mesActual: false, ausencias: [] },
-  { dia: 1, mesActual: true, ausencias: [] },
-  { dia: 2, mesActual: true, ausencias: [] },
-  { dia: 3, mesActual: true, ausencias: [] },
-  { dia: 4, mesActual: true, ausencias: [] },
-  { dia: 5, mesActual: true, ausencias: [] },
-  { dia: 6, mesActual: true, ausencias: [] },
-  { dia: 7, mesActual: true, ausencias: [] },
-  { dia: 8, mesActual: true, ausencias: [{ nombre: 'C. Rivera', tipo: 'aprobado' }] },
-  { dia: 9, mesActual: true, ausencias: [{ nombre: 'C. Rivera', tipo: 'aprobado' }] },
-  { dia: 10, mesActual: true, ausencias: [] },
-  { dia: 11, mesActual: true, ausencias: [] },
-  { dia: 12, mesActual: true, ausencias: [] },
-  { dia: 13, mesActual: true, ausencias: [] },
-  { dia: 14, mesActual: true, ausencias: [{ nombre: 'S. Valenzuela', tipo: 'aprobado' }] },
+// Nombres de meses en español para la navegación del calendario
+const MESES_ESPANOL = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
+// =========================================================================
+// SINGLE SOURCE OF TRUTH: Solicitudes del Equipo (Mock Requests Centralizado)
+// =========================================================================
+export const MOCK_REQUESTS: SolicitudSubordinado[] = [
   {
-    dia: 15,
-    mesActual: true,
-    ausencias: [
-      { nombre: 'S. Valenzuela', tipo: 'aprobado' },
-      { nombre: 'A. Morales', tipo: 'pendiente' },
-    ],
+    id: 'SOL-2026-008',
+    colaboradorId: 'EMP-05309',
+    employeeId: 'EMP-05309',
+    colaboradorNombre: 'Alejandro Morales Cruz',
+    colaboradorPuesto: 'Desarrollador Backend Cloud',
+    colaboradorDepto: 'Ingeniería y TI',
+    colaboradorEmail: 'amorales@ayvi.com.mx',
+    tipo: 'Vacaciones',
+    fechas: '09/Oct - 15/Oct/2026',
+    fechaInicio: '2026-10-09', // Viernes 09/Oct: exactamente 5 días hábiles al 15/Oct
+    fechaFin: '2026-10-15',
+    dias: 5,
+    saldoDisponible: 10,
+    comentarios: '',
+    fechaSolicitud: '20/Sep/2026',
+    estatus: 'Pendiente',
+    saldoActualVacaciones: 10,
+    esExcepcion: false,
+    avatarColor: 'bg-blue-600',
   },
   {
-    dia: 16,
-    mesActual: true,
-    ausencias: [
-      { nombre: 'S. Valenzuela', tipo: 'aprobado' },
-      { nombre: 'A. Morales', tipo: 'pendiente' },
-    ],
+    id: 'SOL-2026-005',
+    colaboradorId: 'EMP-05120',
+    employeeId: 'EMP-05120',
+    colaboradorNombre: 'Sofía Valenzuela Mendoza',
+    colaboradorPuesto: 'Diseñadora de Producto UI/UX',
+    colaboradorDepto: 'Diseño e Innovación',
+    colaboradorEmail: 'svalenzuela@ayvi.com.mx',
+    tipo: 'Día Flex',
+    fechas: '28/Sep/2026',
+    fechaInicio: '2026-09-28',
+    fechaFin: '2026-09-28',
+    dias: 1,
+    saldoDisponible: 2,
+    comentarios: 'Día flex para atender trámites personales bancarios y notariales por la mañana. Dejo cubiertos mis entregables de diseño del sprint.',
+    fechaSolicitud: '21/Sep/2026',
+    estatus: 'Pendiente',
+    saldoActualVacaciones: 2,
+    esExcepcion: false,
+    avatarColor: 'bg-emerald-600',
   },
-  { dia: 17, mesActual: true, ausencias: [] },
-  { dia: 18, mesActual: true, ausencias: [] },
-  { dia: 19, mesActual: true, ausencias: [] },
-  { dia: 20, mesActual: true, ausencias: [] },
-  { dia: 21, mesActual: true, ausencias: [] },
-  { dia: 22, mesActual: true, ausencias: [{ nombre: 'D. Gutiérrez', tipo: 'pendiente' }] },
   {
-    dia: 23,
-    mesActual: true,
-    ausencias: [
-      { nombre: 'D. Gutiérrez', tipo: 'pendiente' },
-      { nombre: 'E. Luna', tipo: 'aprobado' },
-    ],
+    id: 'SOL-2026-006',
+    colaboradorId: 'EMP-05234',
+    employeeId: 'EMP-05234',
+    colaboradorNombre: 'Carlos Alberto Méndez',
+    colaboradorPuesto: 'Ingeniero de Datos & Cloud',
+    colaboradorDepto: 'Arquitectura de Datos',
+    colaboradorEmail: 'cmendez@ayvi.com.mx',
+    tipo: 'Vacaciones',
+    fechas: '03/Nov - 07/Nov/2026',
+    fechaInicio: '2026-11-03',
+    fechaFin: '2026-11-07',
+    dias: 4,
+    saldoDisponible: 6,
+    comentarios: null,
+    fechaSolicitud: '22/Sep/2026',
+    estatus: 'Pendiente',
+    saldoActualVacaciones: 6,
+    esExcepcion: false,
+    avatarColor: 'bg-purple-600',
   },
-  { dia: 24, mesActual: true, ausencias: [] },
-  { dia: 25, mesActual: true, ausencias: [] },
-  { dia: 26, mesActual: true, ausencias: [] },
-  { dia: 27, mesActual: true, ausencias: [] },
-  { dia: 28, mesActual: true, ausencias: [] },
-  { dia: 29, mesActual: true, ausencias: [{ nombre: 'M. Ramos', tipo: 'aprobado' }] },
-  { dia: 30, mesActual: true, ausencias: [{ nombre: 'M. Ramos', tipo: 'aprobado' }] },
-  { dia: 31, mesActual: true, ausencias: [] },
-  { dia: 1, mesActual: false, ausencias: [] },
+  {
+    id: 'SOL-2026-007',
+    colaboradorId: 'EMP-04981',
+    employeeId: 'EMP-04981',
+    colaboradorNombre: 'Mariana Rivas Pacheco',
+    colaboradorPuesto: 'Especialista de QA & Testing',
+    colaboradorDepto: 'Calidad de Software',
+    colaboradorEmail: 'mrivas@ayvi.com.mx',
+    tipo: 'Vacaciones',
+    fechas: '18/Oct - 21/Oct/2026',
+    fechaInicio: '2026-10-18',
+    fechaFin: '2026-10-21',
+    dias: 3,
+    saldoDisponible: 0,
+    comentarios: 'Solicito autorización por caso de fuerza mayor familiar (cita médica especializada foránea de mi madre). Acordé previamente con Jefatura que los días se tomen como excepción a cuenta de los que se generarán en mi aniversario 2027.',
+    fechaSolicitud: '19/Sep/2026',
+    estatus: 'Pendiente',
+    saldoActualVacaciones: 0,
+    esExcepcion: true,
+    motivoExcepcion: 'Trámite personal extraordinario respaldado por Jefatura. Saldo a cuenta de aniversario 2027.',
+    avatarColor: 'bg-amber-600',
+  },
+  // Solicitud pasada no aprobada a tiempo: su fecha de inicio ya pasó, por lo que auto-expira
+  {
+    id: 'SOL-2026-003',
+    colaboradorId: 'EMP-05411',
+    employeeId: 'EMP-05411',
+    colaboradorNombre: 'Raúl Domínguez Soto',
+    colaboradorPuesto: 'Desarrollador Mobile iOS',
+    colaboradorDepto: 'Ingeniería y TI',
+    colaboradorEmail: 'rdominguez@ayvi.com.mx',
+    tipo: 'Vacaciones',
+    fechas: '10/Sep - 15/Sep/2026',
+    fechaInicio: '2026-09-10',
+    fechaFin: '2026-09-15',
+    dias: 4,
+    saldoDisponible: 8,
+    comentarios: 'Solicitud no resuelta antes del inicio del descanso programado.',
+    fechaSolicitud: '01/Sep/2026',
+    estatus: 'Pendiente',
+    saldoActualVacaciones: 8,
+    esExcepcion: false,
+    avatarColor: 'bg-indigo-600',
+  },
+  // Historial previo resuelto de miembros del equipo
+  {
+    id: 'SOL-2026-002',
+    colaboradorId: 'EMP-05120',
+    employeeId: 'EMP-05120',
+    colaboradorNombre: 'Sofía Valenzuela Mendoza',
+    colaboradorPuesto: 'Diseñadora de Producto UI/UX',
+    colaboradorDepto: 'Diseño e Innovación',
+    colaboradorEmail: 'svalenzuela@ayvi.com.mx',
+    tipo: 'Vacaciones',
+    fechas: '14/Ago - 15/Ago/2026',
+    fechaInicio: '2026-08-14',
+    fechaFin: '2026-08-15',
+    dias: 2,
+    saldoDisponible: 14,
+    comentarios: 'Vacaciones planificadas de verano.',
+    fechaSolicitud: '05/Ago/2026',
+    estatus: 'Aprobada',
+    fechaResolucion: '06/Ago/2026',
+    avatarColor: 'bg-emerald-600',
+  },
+  {
+    id: 'SOL-2026-001',
+    colaboradorId: 'EMP-05234',
+    employeeId: 'EMP-05234',
+    colaboradorNombre: 'Carlos Alberto Méndez',
+    colaboradorPuesto: 'Ingeniero de Datos & Cloud',
+    colaboradorDepto: 'Arquitectura de Datos',
+    colaboradorEmail: 'cmendez@ayvi.com.mx',
+    tipo: 'Día Flex',
+    fechas: '01/Ago/2026',
+    fechaInicio: '2026-08-01',
+    fechaFin: '2026-08-01',
+    dias: 1,
+    saldoDisponible: 2,
+    comentarios: '',
+    fechaSolicitud: '28/Jul/2026',
+    estatus: 'Rechazada',
+    motivoRechazo: 'Coincide con ventana crítica de migración de base de datos a producción.',
+    fechaResolucion: '29/Jul/2026',
+    avatarColor: 'bg-purple-600',
+  },
+  {
+    id: 'SOL-2026-009',
+    colaboradorId: 'EMP-05120',
+    employeeId: 'EMP-05120',
+    colaboradorNombre: 'Sofía Valenzuela Mendoza',
+    colaboradorPuesto: 'Diseñadora de Producto UI/UX',
+    colaboradorDepto: 'Diseño e Innovación',
+    colaboradorEmail: 'svalenzuela@ayvi.com.mx',
+    tipo: 'Vacaciones',
+    fechas: '12/Nov - 16/Nov/2026',
+    fechaInicio: '2026-11-12',
+    fechaFin: '2026-11-16',
+    dias: 4,
+    saldoDisponible: 8,
+    comentarios: 'Solicito cancelar estas vacaciones aprobadas debido a la reprogramación del lanzamiento del producto para diciembre.',
+    fechaSolicitud: '23/Sep/2026',
+    estatus: 'Pendiente de Cancelación (Jefe)',
+    esCancelacion: true,
+    saldoActualVacaciones: 8,
+    esExcepcion: false,
+    avatarColor: 'bg-emerald-600',
+  },
 ];
 
 export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
@@ -141,161 +283,8 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
   // 1. DEFINIR EL USUARIO ACTUAL (Sesión activa del supervisor)
   const currentUser: CurrentUser = propCurrentUser || CURRENT_USER_DEFAULT;
 
-  // 2. DATOS SIMULADOS (Mock Data):
-  // Cada solicitud incluye colaboradorId / employeeId, saldoDisponible y comentarios.
-  // - Solicitudes normales: saldoDisponible > dias solicitados
-  // - Solicitud de Mariana Rivas (caso de excepción): saldoDisponible = 0 y justificación detallada
-  const [solicitudes, setSolicitudes] = useState<SolicitudSubordinado[]>([
-    {
-      id: 'SOL-2026-008',
-      colaboradorId: 'EMP-05309',
-      employeeId: 'EMP-05309',
-      colaboradorNombre: 'Alejandro Morales Cruz',
-      colaboradorPuesto: 'Desarrollador Backend Cloud',
-      colaboradorDepto: 'Ingeniería y TI',
-      colaboradorEmail: 'amorales@ayvi.com.mx',
-      tipo: 'Vacaciones',
-      fechas: '10/Oct - 15/Oct/2026',
-      fechaInicio: '2026-10-10',
-      fechaFin: '2026-10-15',
-      dias: 5,
-      saldoDisponible: 10,
-      comentarios: '',
-      fechaSolicitud: '20/Sep/2026',
-      estatus: 'Pendiente',
-      saldoActualVacaciones: 10,
-      esExcepcion: false,
-      avatarColor: 'bg-blue-600',
-    },
-    {
-      id: 'SOL-2026-005',
-      colaboradorId: 'EMP-05120',
-      employeeId: 'EMP-05120',
-      colaboradorNombre: 'Sofía Valenzuela Mendoza',
-      colaboradorPuesto: 'Diseñadora de Producto UI/UX',
-      colaboradorDepto: 'Diseño e Innovación',
-      colaboradorEmail: 'svalenzuela@ayvi.com.mx',
-      tipo: 'Día Flex',
-      fechas: '28/Sep/2026',
-      fechaInicio: '2026-09-28',
-      fechaFin: '2026-09-28',
-      dias: 1,
-      saldoDisponible: 2, // Días Flex tienen un máximo de 3 al año; saldo lógico realista
-      comentarios: 'Día flex para atender trámites personales bancarios y notariales por la mañana. Dejo cubiertos mis entregables de diseño del sprint.',
-      fechaSolicitud: '21/Sep/2026',
-      estatus: 'Pendiente',
-      saldoActualVacaciones: 2,
-      esExcepcion: false,
-      avatarColor: 'bg-emerald-600',
-    },
-    {
-      id: 'SOL-2026-006',
-      colaboradorId: 'EMP-05234',
-      employeeId: 'EMP-05234',
-      colaboradorNombre: 'Carlos Alberto Méndez',
-      colaboradorPuesto: 'Ingeniero de Datos & Cloud',
-      colaboradorDepto: 'Arquitectura de Datos',
-      colaboradorEmail: 'cmendez@ayvi.com.mx',
-      tipo: 'Vacaciones',
-      fechas: '03/Nov - 07/Nov/2026',
-      fechaInicio: '2026-11-03',
-      fechaFin: '2026-11-07',
-      dias: 4,
-      saldoDisponible: 6,
-      comentarios: null,
-      fechaSolicitud: '22/Sep/2026',
-      estatus: 'Pendiente',
-      saldoActualVacaciones: 6,
-      esExcepcion: false,
-      avatarColor: 'bg-purple-600',
-    },
-    {
-      id: 'SOL-2026-007',
-      colaboradorId: 'EMP-04981',
-      employeeId: 'EMP-04981',
-      colaboradorNombre: 'Mariana Rivas Pacheco',
-      colaboradorPuesto: 'Especialista de QA & Testing',
-      colaboradorDepto: 'Calidad de Software',
-      colaboradorEmail: 'mrivas@ayvi.com.mx',
-      tipo: 'Vacaciones',
-      fechas: '18/Oct - 21/Oct/2026',
-      fechaInicio: '2026-10-18',
-      fechaFin: '2026-10-21',
-      dias: 3,
-      saldoDisponible: 0, // Solicitud en déficit: pide 3 días teniendo 0 de saldo
-      comentarios: 'Solicito autorización por caso de fuerza mayor familiar (cita médica especializada foránea de mi madre). Acordé previamente con Jefatura que los días se tomen como excepción a cuenta de los que se generarán en mi aniversario 2027.',
-      fechaSolicitud: '19/Sep/2026',
-      estatus: 'Pendiente',
-      saldoActualVacaciones: 0,
-      esExcepcion: true,
-      motivoExcepcion: 'Trámite personal extraordinario respaldado por Jefatura. Saldo a cuenta de aniversario 2027.',
-      avatarColor: 'bg-amber-600',
-    },
-    // Historial previo resuelto de miembros del equipo
-    {
-      id: 'SOL-2026-002',
-      colaboradorId: 'EMP-05120',
-      employeeId: 'EMP-05120',
-      colaboradorNombre: 'Sofía Valenzuela Mendoza',
-      colaboradorPuesto: 'Diseñadora de Producto UI/UX',
-      colaboradorDepto: 'Diseño e Innovación',
-      colaboradorEmail: 'svalenzuela@ayvi.com.mx',
-      tipo: 'Vacaciones',
-      fechas: '14/Ago - 15/Ago/2026',
-      fechaInicio: '2026-08-14',
-      fechaFin: '2026-08-15',
-      dias: 2,
-      saldoDisponible: 14,
-      comentarios: 'Vacaciones planificadas de verano.',
-      fechaSolicitud: '05/Ago/2026',
-      estatus: 'Aprobada',
-      fechaResolucion: '06/Ago/2026',
-      avatarColor: 'bg-emerald-600',
-    },
-    {
-      id: 'SOL-2026-001',
-      colaboradorId: 'EMP-05234',
-      employeeId: 'EMP-05234',
-      colaboradorNombre: 'Carlos Alberto Méndez',
-      colaboradorPuesto: 'Ingeniero de Datos & Cloud',
-      colaboradorDepto: 'Arquitectura de Datos',
-      colaboradorEmail: 'cmendez@ayvi.com.mx',
-      tipo: 'Día Flex',
-      fechas: '01/Ago/2026',
-      fechaInicio: '2026-08-01',
-      fechaFin: '2026-08-01',
-      dias: 1,
-      saldoDisponible: 2,
-      comentarios: '',
-      fechaSolicitud: '28/Jul/2026',
-      estatus: 'Rechazada',
-      motivoRechazo: 'Coincide con ventana crítica de migración de base de datos a producción.',
-      fechaResolucion: '29/Jul/2026',
-      avatarColor: 'bg-purple-600',
-    },
-    {
-      id: 'SOL-2026-009',
-      colaboradorId: 'EMP-05120',
-      employeeId: 'EMP-05120',
-      colaboradorNombre: 'Sofía Valenzuela Mendoza',
-      colaboradorPuesto: 'Diseñadora de Producto UI/UX',
-      colaboradorDepto: 'Diseño e Innovación',
-      colaboradorEmail: 'svalenzuela@ayvi.com.mx',
-      tipo: 'Vacaciones',
-      fechas: '12/Nov - 16/Nov/2026',
-      fechaInicio: '2026-11-12',
-      fechaFin: '2026-11-16',
-      dias: 4,
-      saldoDisponible: 8,
-      comentarios: 'Solicito cancelar estas vacaciones aprobadas debido a la reprogramación del lanzamiento del producto para diciembre.',
-      fechaSolicitud: '23/Sep/2026',
-      estatus: 'Pendiente de Cancelación (Jefe)',
-      esCancelacion: true,
-      saldoActualVacaciones: 8,
-      esExcepcion: false,
-      avatarColor: 'bg-emerald-600',
-    },
-  ]);
+  // 2. DATOS CENTRALIZADOS (Estado único de la bandeja de aprobaciones)
+  const [solicitudes, setSolicitudes] = useState<SolicitudSubordinado[]>(MOCK_REQUESTS);
 
   // Modal de Alerta Minimalista Unificado
   const [alertModal, setAlertModal] = useState<AlertModalState>({
@@ -328,6 +317,29 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
   // Estado para Pases de Excepción (Habilitar Modo Excepción por 24h)
   const [activeTokens, setActiveTokens] = useState<string[]>(['Mariana Rivas']);
   const [selectedCollaborator, setSelectedCollaborator] = useState<string>('Sofía Valenzuela');
+
+  // PARTE 2: Calendario Dinámico (Navegación de Meses)
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 9, 1)); // Octubre 2026
+
+  const calendarYear = currentDate.getFullYear();
+  const calendarMonth = currentDate.getMonth(); // 0..11
+  const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+
+  let firstDayOffset = new Date(calendarYear, calendarMonth, 1).getDay() - 1;
+  if (firstDayOffset === -1) firstDayOffset = 6;
+
+  const totalCeldasOcupadas = firstDayOffset + daysInMonth;
+  const trailingDays = (7 - (totalCeldasOcupadas % 7)) % 7;
+
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(calendarYear, calendarMonth - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(calendarYear, calendarMonth + 1, 1));
+  };
+
+  const pad2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
   const handleGenerarPase = () => {
     if (!selectedCollaborator) return;
@@ -494,11 +506,38 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
   };
 
   // =========================================================================
-  // 3. LÓGICA DE FILTRADO (PROTECCIÓN DE SEGURIDAD):
+  // 3. REGLA DE NEGOCIO: AUTO-EXPIRACIÓN DE SOLICITUDES PENDIENTES
+  // Si una solicitud tiene estatus "Pendiente" y su fechaInicio ya pasó
+  // (fechaInicio < today), su estatus cambia automáticamente a "Expirado por Sistema".
+  // Desaparece de "Pendientes de Aprobación" y se mueve a "Historial Resuelto".
+  // =========================================================================
+  const todayStr = React.useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  const solicitudesConAutoExpiracion = React.useMemo(() => {
+    return solicitudes.map((sol) => {
+      if (sol.estatus === 'Pendiente' && sol.fechaInicio < todayStr) {
+        return {
+          ...sol,
+          estatus: 'Expirado por Sistema' as const,
+          fechaResolucion: 'Expirado por Sistema',
+        };
+      }
+      return sol;
+    });
+  }, [solicitudes, todayStr]);
+
+  // =========================================================================
+  // 4. LÓGICA DE FILTRADO (PROTECCIÓN DE SEGURIDAD):
   // El usuario que tiene la sesión activa (el jefe/supervisor) jamás debe aparecer
   // en su propia lista de solicitudes por aprobar. Filtramos por ID de nómina y nombre.
   // =========================================================================
-  const filteredApprovals = solicitudes.filter(
+  const filteredApprovals = solicitudesConAutoExpiracion.filter(
     (approval) =>
       approval.colaboradorId !== currentUser.id &&
       approval.employeeId !== currentUser.id &&
@@ -511,6 +550,51 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
   const solicitudesHistorial = filteredApprovals.filter(
     (s) => s.estatus !== 'Pendiente' && s.estatus !== 'Pendiente de Cancelación (Jefe)'
   );
+
+  // =========================================================================
+  // 5. CALENDARIO CONECTADO AL ARREGLO CENTRAL:
+  // Lee este mismo arreglo procesado. Si la solicitud está "Expirada por Sistema",
+  // "Cancelada" o "Rechazada", NO se pinta. Excluye fines de semana de las etiquetas.
+  // =========================================================================
+  const obtenerAusenciasDelDia = (dia: number) => {
+    // Excluir fines de semana: Sábados (6) y Domingos (0) son días inhábiles
+    const fechaObj = new Date(calendarYear, calendarMonth, dia);
+    const dayOfWeek = fechaObj.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return [];
+    }
+
+    const fechaStr = `${calendarYear}-${pad2(calendarMonth + 1)}-${pad2(dia)}`;
+
+    return filteredApprovals
+      .filter((sol) => {
+        // Excluir solicitudes no vigentes del calendario
+        if (
+          sol.estatus === 'Rechazada' ||
+          sol.estatus === 'Cancelada' ||
+          sol.estatus === 'Cancelado' ||
+          sol.estatus === 'Expirado por Sistema'
+        ) {
+          return false;
+        }
+        return fechaStr >= sol.fechaInicio && fechaStr <= sol.fechaFin;
+      })
+      .map((sol) => {
+        const partes = sol.colaboradorNombre.trim().split(' ');
+        const nombreCorto =
+          partes.length > 1 ? `${partes[0][0]}. ${partes[1]}` : sol.colaboradorNombre;
+
+        const tipo: 'pendiente' | 'aprobado' =
+          sol.estatus === 'Aprobada' ? 'aprobado' : 'pendiente';
+
+        return {
+          id: sol.id,
+          nombre: nombreCorto,
+          nombreCompleto: sol.colaboradorNombre,
+          tipo,
+        };
+      });
+  };
 
   // =========================================================================
   // 4. ACTUALIZACIÓN DE CONTADORES:
@@ -736,18 +820,18 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           {/* VISTA DESKTOP: Tabla Corporativa Limpia (Visible en pantallas medianas y grandes) */}
           <div className="hidden md:block bg-white border border-gray-200 rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-xs table-auto">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-gray-600 font-semibold uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4">Colaborador / Puesto</th>
-                    <th className="py-3 px-4">Tipo</th>
-                    <th className="py-3 px-4">Rango de Fechas</th>
-                    <th className="py-3 px-4">Días</th>
-                    <th className="py-3 px-4">Saldo Disponible</th>
-                    <th className="py-3 px-4">Fecha Solicitud</th>
-                    <th className="py-3 px-4">Comentarios</th>
-                    <th className="py-3 px-4">Estatus</th>
-                    <th className="py-3 px-4 text-right">Acciones</th>
+                    <th className="py-2.5 px-2.5">Colaborador / Puesto</th>
+                    <th className="py-2.5 px-2">Tipo</th>
+                    <th className="py-2.5 px-2">Rango de Fechas</th>
+                    <th className="py-2.5 px-2">Días</th>
+                    <th className="py-2.5 px-2">Saldo Disp.</th>
+                    <th className="py-2.5 px-2">Fecha Sol.</th>
+                    <th className="py-2.5 px-2">Comentarios</th>
+                    <th className="py-2.5 px-2">Estatus</th>
+                    <th className="py-2.5 px-2 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
@@ -765,22 +849,22 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                         >
                           {/* Colaborador */}
                           <td
-                            className={`py-3.5 px-4 whitespace-nowrap ${
+                            className={`py-2.5 px-2.5 ${
                               esDeficit ? 'border-l-4 border-l-red-500' : ''
                             }`}
                           >
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-bold text-[11px] shrink-0 border border-gray-300">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-bold text-[10px] shrink-0 border border-gray-300">
                                 {sol.colaboradorNombre
                                   .split(' ')
                                   .map((n) => n[0])
                                   .slice(0, 2)
                                   .join('')}
                               </div>
-                              <div>
-                                <div className="font-semibold text-gray-900 flex items-center gap-1.5">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-gray-900 flex flex-wrap items-center gap-1">
                                   <span>{sol.colaboradorNombre}</span>
-                                  <span className="text-[10px] text-gray-500 font-mono font-normal bg-gray-100 px-1.5 py-0.2 rounded border border-gray-200">
+                                  <span className="text-[9px] text-gray-500 font-mono font-normal bg-gray-100 px-1 py-0.2 rounded border border-gray-200">
                                     {sol.colaboradorId}
                                   </span>
                                 </div>
@@ -792,61 +876,61 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                           </td>
 
                           {/* Tipo */}
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
+                          <td className="py-2.5 px-2">
+                            <div className="flex flex-wrap items-center gap-1">
                               <span className="font-medium text-gray-900">{sol.tipo}</span>
                               {sol.esExcepcion && (
                                 <span
-                                  className="text-[10px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.2 rounded font-mono font-medium"
+                                  className="text-[9px] bg-red-50 text-red-700 border border-red-200 px-1 py-0.2 rounded font-mono font-medium"
                                   title="Solicitud por excepción / Saldo en 0"
                                 >
                                   Excepción
                                 </span>
                               )}
                             </div>
-                            <span className="text-[10px] text-gray-400 font-mono block">
+                            <span className="text-[9px] text-gray-400 font-mono block">
                               {sol.id}
                             </span>
                           </td>
 
                           {/* Fechas */}
-                          <td className="py-3.5 px-4 whitespace-nowrap font-mono text-gray-800">
+                          <td className="py-2.5 px-2 font-mono text-gray-800 text-[11px] leading-tight">
                             {sol.fechas}
                           </td>
 
                           {/* Total de Días */}
-                          <td className="py-3.5 px-4 whitespace-nowrap font-medium text-gray-900 tabular-nums">
-                            <span className="inline-block bg-gray-100 text-gray-800 px-2 py-0.5 rounded border border-gray-200 text-xs font-semibold">
+                          <td className="py-2.5 px-2 tabular-nums">
+                            <span className="inline-block bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded border border-gray-200 text-[11px] font-semibold whitespace-nowrap">
                               {sol.dias} {sol.dias === 1 ? 'día' : 'días'}
                             </span>
                           </td>
 
                           {/* Saldo Disponible con Alerta Visual si dias > saldoDisponible */}
-                          <td className="py-3.5 px-4 whitespace-nowrap tabular-nums">
+                          <td className="py-2.5 px-2 tabular-nums">
                             {esDeficit ? (
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1">
                                 <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                                <span className="text-red-600 font-bold">
-                                  {sol.saldoDisponible} {sol.saldoDisponible === 1 ? 'día' : 'días'}
+                                <span className="text-red-600 font-bold text-[11px] whitespace-nowrap">
+                                  {sol.saldoDisponible} {sol.saldoDisponible === 1 ? 'd' : 'días'}
                                 </span>
-                                <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-semibold border border-red-200">
+                                <span className="text-[9px] bg-red-100 text-red-800 px-1 py-0.2 rounded font-semibold border border-red-200">
                                   Déficit
                                 </span>
                               </div>
                             ) : (
-                              <span className="font-medium text-gray-700">
+                              <span className="font-medium text-gray-700 text-[11px] whitespace-nowrap">
                                 {sol.saldoDisponible} {sol.saldoDisponible === 1 ? 'día' : 'días'}
                               </span>
                             )}
                           </td>
 
                           {/* Fecha en que se hizo la solicitud */}
-                          <td className="py-3.5 px-4 whitespace-nowrap text-gray-500 text-[11px]">
+                          <td className="py-2.5 px-2 text-gray-500 text-[11px]">
                             {sol.fechaSolicitud}
                           </td>
 
                           {/* Comentarios */}
-                          <td className="py-3.5 px-4 whitespace-nowrap text-xs">
+                          <td className="py-2.5 px-2 text-xs">
                             {sol.comentarios && sol.comentarios.trim().length > 0 ? (
                               <button
                                 type="button"
@@ -854,7 +938,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                                   setActiveComment(sol.comentarios || null);
                                   setActiveCommentAuthor(`${sol.colaboradorNombre} (${sol.id})`);
                                 }}
-                                className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer transition-colors"
+                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer transition-colors text-[11px]"
                                 title="Ver justificación o comentario del colaborador"
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
@@ -866,48 +950,54 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                           </td>
 
                           {/* Estatus */}
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          <td className="py-2.5 px-2">
                             {sol.estatus === 'Pendiente' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span>
-                                Pendiente (Jefe)
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span>
+                                Pendiente
                               </span>
                             )}
                             {sol.estatus === 'Pendiente de Cancelación (Jefe)' && (
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mr-1.5 animate-pulse"></span>
-                                Solicitud de Cancelación
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mr-1 animate-pulse"></span>
+                                Cancelación
                               </span>
                             )}
                             {sol.estatus === 'Aprobada' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1"></span>
                                 Aprobada
                               </span>
                             )}
                             {(sol.estatus === 'Cancelada' || sol.estatus === 'Cancelado') && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mr-1.5"></span>
-                                Cancelada (Reversada)
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mr-1"></span>
+                                Cancelada
                               </span>
                             )}
                             {sol.estatus === 'Rechazada' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-50 text-red-800 border border-red-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5"></span>
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-800 border border-red-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1"></span>
                                 Rechazada
+                              </span>
+                            )}
+                            {sol.estatus === 'Expirado por Sistema' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-300 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1"></span>
+                                Expirado
                               </span>
                             )}
                           </td>
 
                           {/* Acciones Requeridas */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <td className="py-2.5 px-2 text-right">
                             {sol.estatus === 'Pendiente' && (
-                              <div className="inline-flex items-center gap-2 justify-end">
+                              <div className="inline-flex items-center gap-1.5 justify-end">
                                 {/* Botón Aprobar: Verde */}
                                 <button
                                   type="button"
                                   onClick={() => handleAprobar(sol)}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-none transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-none transition-colors cursor-pointer"
                                   title="Aprobar solicitud y descontar del saldo visible"
                                 >
                                   <Check className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -918,7 +1008,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleAbrirRechazo(sol)}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded text-red-700 bg-white border border-red-300 hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded text-red-700 bg-white border border-red-300 hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
                                   title="Rechazar solicitud con motivo opcional"
                                 >
                                   <X className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -928,34 +1018,38 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                             )}
 
                             {sol.estatus === 'Pendiente de Cancelación (Jefe)' && (
-                              <div className="inline-flex items-center gap-2 justify-end">
+                              <div className="inline-flex items-center gap-1.5 justify-end">
                                 {/* Botón Aprobar Cancelación */}
                                 <button
                                   type="button"
                                   onClick={() => handleAprobarCancelacion(sol)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-none transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-none transition-colors cursor-pointer"
                                   title="Aprobar cancelación y reembolsar los días al saldo visible"
                                 >
                                   <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                                  <span>Aprobar Cancelación</span>
+                                  <span>Aprobar</span>
                                 </button>
 
                                 {/* Botón Rechazar Cancelación */}
                                 <button
                                   type="button"
                                   onClick={() => handleRechazarCancelacion(sol)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded text-red-700 bg-white border border-red-300 hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded text-red-700 bg-white border border-red-300 hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
                                   title="Rechazar cancelación y mantener los días descontados"
                                 >
                                   <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                                  <span>Rechazar Cancelación</span>
+                                  <span>Rechazar</span>
                                 </button>
                               </div>
                             )}
 
                             {sol.estatus !== 'Pendiente' && sol.estatus !== 'Pendiente de Cancelación (Jefe)' && (
                               <div className="text-[11px] text-gray-500 text-right">
-                                <span>Resuelto: {sol.fechaResolucion || 'Procesado'}</span>
+                                <span>
+                                  {sol.estatus === 'Expirado por Sistema'
+                                    ? 'Expirado por Sistema'
+                                    : `Resuelto: ${sol.fechaResolucion || 'Procesado'}`}
+                                </span>
                               </div>
                             )}
                           </td>
@@ -1020,6 +1114,8 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                             ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                             : sol.estatus === 'Cancelada' || sol.estatus === 'Cancelado'
                             ? 'bg-gray-100 text-gray-700 border border-gray-200'
+                            : sol.estatus === 'Expirado por Sistema'
+                            ? 'bg-gray-100 text-gray-700 border border-gray-300'
                             : 'bg-red-50 text-red-800 border border-red-200'
                         }`}
                       >
@@ -1029,6 +1125,8 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                           ? 'Solicitud de Cancelación'
                           : sol.estatus === 'Cancelada' || sol.estatus === 'Cancelado'
                           ? 'Cancelada (Reversada)'
+                          : sol.estatus === 'Expirado por Sistema'
+                          ? 'Expirado'
                           : sol.estatus}
                       </span>
                       {esDeficit && (
@@ -1169,7 +1267,9 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                   </div>
                 ) : (
                   <div className="pt-2 border-t border-gray-100 text-center text-[11px] text-gray-500">
-                    Resolución registrada el {sol.fechaResolucion || 'Procesado'}
+                    {sol.estatus === 'Expirado por Sistema'
+                      ? 'Expirado por Sistema'
+                      : `Resolución registrada el ${sol.fechaResolucion || 'Procesado'}`}
                   </div>
                 )}
               </div>
@@ -1189,9 +1289,31 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-gray-900">
-                Calendario de Ausencias (Octubre 2026)
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Calendario de Ausencias ({MESES_ESPANOL[calendarMonth]} {calendarYear})
+                </h3>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                    title="Mes anterior"
+                    aria-label="Mes anterior"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextMonth}
+                    className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 border border-gray-200 shadow-2xs transition-colors cursor-pointer"
+                    title="Mes siguiente"
+                    aria-label="Mes siguiente"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
               <p className="text-xs text-gray-500 mt-0.5">
                 Supervisión mensual de descansos programados y detección temprana de empalmes.
               </p>
@@ -1210,52 +1332,88 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           </div>
         </div>
 
-        {/* Cuadrícula del Calendario (Grid) */}
+        {/* Cuadrícula del Calendario (Grid Dinámico) */}
         <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden">
           {/* Fila de días: Lunes a Domingo */}
-          {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((dia) => (
+          {['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'].map((dia, idx) => (
             <div
               key={dia}
-              className="bg-gray-50 text-xs font-medium text-gray-500 text-center py-2"
+              className={`${
+                idx >= 5
+                  ? 'bg-slate-100/90 text-slate-500 font-semibold'
+                  : 'bg-gray-50 text-gray-500 font-medium'
+              } text-xs text-center py-2`}
             >
               {dia}
             </div>
           ))}
 
-          {/* Celdas (Días) */}
-          {DIAS_CALENDARIO_EQUIPO.map((celda, idx) => (
-            <div
-              key={idx}
-              className={`bg-white h-24 p-1 flex flex-col gap-1 overflow-y-auto ${
-                !celda.mesActual ? 'bg-gray-50/40' : ''
-              }`}
-            >
-              <div className="text-right">
-                <span
-                  className={`text-xs font-medium ${
-                    celda.mesActual ? 'text-gray-400' : 'text-gray-300'
-                  }`}
-                >
-                  {celda.dia}
-                </span>
-              </div>
-              {celda.ausencias.map((ausencia, aIdx) => (
-                <div
-                  key={aIdx}
-                  className={`${
-                    ausencia.tipo === 'pendiente'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-green-100 text-green-800'
-                  } text-[10px] px-1.5 py-0.5 rounded truncate font-medium`}
-                  title={`${ausencia.nombre} (${
-                    ausencia.tipo === 'pendiente' ? 'Pendiente' : 'Aprobada'
-                  })`}
-                >
-                  {ausencia.nombre}
+          {/* 1. Celdas vacías iniciales (Desfase de inicio de mes) */}
+          {Array.from({ length: firstDayOffset }).map((_, idx) => {
+            const esFinDeSemana = idx === 5 || idx === 6;
+            return (
+              <div
+                key={`empty-start-${idx}`}
+                className={`${esFinDeSemana ? 'bg-slate-50/60' : 'bg-gray-50/50'} h-24 p-1 border-0`}
+                aria-hidden="true"
+              />
+            );
+          })}
+
+          {/* 2. Celdas correspondientes a los días del mes actual */}
+          {Array.from({ length: daysInMonth }).map((_, idx) => {
+            const dia = idx + 1;
+            const colIndex = (firstDayOffset + idx) % 7;
+            const esFinDeSemana = colIndex === 5 || colIndex === 6;
+            const ausencias = obtenerAusenciasDelDia(dia);
+
+            return (
+              <div
+                key={`day-${dia}`}
+                className={`${
+                  esFinDeSemana ? 'bg-slate-50' : 'bg-white'
+                } h-24 p-1 flex flex-col gap-0.5 overflow-y-auto`}
+              >
+                <div className="text-right">
+                  <span
+                    className={`text-xs ${
+                      esFinDeSemana ? 'text-slate-400 font-normal' : 'text-gray-600 font-medium'
+                    }`}
+                  >
+                    {dia}
+                  </span>
                 </div>
-              ))}
-            </div>
-          ))}
+                {ausencias.map((ausencia, aIdx) => (
+                  <div
+                    key={aIdx}
+                    className={`${
+                      ausencia.tipo === 'pendiente'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                        : 'bg-green-100 text-green-800 border border-green-200'
+                    } my-0.5 text-[10px] px-1.5 py-0.5 rounded-sm truncate font-medium shadow-2xs`}
+                    title={`${ausencia.nombre} (${
+                      ausencia.tipo === 'pendiente' ? 'Pendiente' : 'Aprobada'
+                    })`}
+                  >
+                    {ausencia.nombre}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+
+          {/* 3. Celdas vacías finales para completar la última semana */}
+          {Array.from({ length: trailingDays }).map((_, idx) => {
+            const colIndex = (firstDayOffset + daysInMonth + idx) % 7;
+            const esFinDeSemana = colIndex === 5 || colIndex === 6;
+            return (
+              <div
+                key={`empty-end-${idx}`}
+                className={`${esFinDeSemana ? 'bg-slate-50/60' : 'bg-gray-50/50'} h-24 p-1 border-0`}
+                aria-hidden="true"
+              />
+            );
+          })}
         </div>
       </div>
 
