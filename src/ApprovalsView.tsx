@@ -18,7 +18,8 @@ import {
   Layers,
   ArrowRight,
   ShieldCheck,
-  MessageSquare
+  MessageSquare,
+  Key
 } from 'lucide-react';
 
 export interface CurrentUser {
@@ -51,7 +52,8 @@ export interface SolicitudSubordinado {
   saldoDisponible: number; // Saldo de días hábiles disponibles antes de la solicitud
   comentarios?: string | null; // Justificación o notas adjuntas por el colaborador
   fechaSolicitud: string;
-  estatus: 'Pendiente' | 'Aprobada' | 'Rechazada';
+  estatus: 'Pendiente' | 'Aprobada' | 'Rechazada' | 'Pendiente de Cancelación (Jefe)' | 'Cancelada' | 'Cancelado';
+  esCancelacion?: boolean;
   saldoActualVacaciones?: number;
   esExcepcion?: boolean;
   motivoExcepcion?: string;
@@ -209,25 +211,56 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       fechaResolucion: '29/Jul/2026',
       avatarColor: 'bg-purple-600',
     },
+    {
+      id: 'SOL-2026-009',
+      colaboradorId: 'EMP-05120',
+      employeeId: 'EMP-05120',
+      colaboradorNombre: 'Sofía Valenzuela Mendoza',
+      colaboradorPuesto: 'Diseñadora de Producto UI/UX',
+      colaboradorDepto: 'Diseño e Innovación',
+      colaboradorEmail: 'svalenzuela@ayvi.com.mx',
+      tipo: 'Vacaciones',
+      fechas: '12/Nov - 16/Nov/2026',
+      fechaInicio: '2026-11-12',
+      fechaFin: '2026-11-16',
+      dias: 4,
+      saldoDisponible: 8,
+      comentarios: 'Solicito cancelar estas vacaciones aprobadas debido a la reprogramación del lanzamiento del producto para diciembre.',
+      fechaSolicitud: '23/Sep/2026',
+      estatus: 'Pendiente de Cancelación (Jefe)',
+      esCancelacion: true,
+      saldoActualVacaciones: 8,
+      esExcepcion: false,
+      avatarColor: 'bg-emerald-600',
+    },
   ]);
 
   // Mensaje Toast local para notificaciones inmediatas
   const [toast, setToast] = useState<{ tipo: 'exito' | 'error' | 'info'; mensaje: string } | null>(null);
 
   // Filtros
-  const [tabActual, setTabActual] = useState<'pendientes' | 'historial'>('pendientes');
+  const [tabActual, setTabActual] = useState<'pendientes' | 'cancelaciones' | 'historial'>('pendientes');
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'Vacaciones' | 'Día Flex'>('todos');
   const [busqueda, setBusqueda] = useState('');
-  const [solicitudExpandida, setSolicitudExpandida] = useState<string | null>(null);
 
   // Estado para el modal de comentarios
   const [activeComment, setActiveComment] = useState<string | null>(null);
   const [activeCommentAuthor, setActiveCommentAuthor] = useState<string>('');
 
-  // Modal para Rechazar con motivo
-  const [solicitudParaRechazar, setSolicitudParaRechazar] = useState<SolicitudSubordinado | null>(null);
-  const [motivoRechazoTexto, setMotivoRechazoTexto] = useState('');
-  const [motivoRapidoSeleccionado, setMotivoRapidoSeleccionado] = useState('');
+  // Estado para el modal de rechazo
+  const [rejectionModal, setRejectionModal] = useState<{
+    isOpen: boolean;
+    requestId: string | null;
+    reason: string;
+  }>({
+    isOpen: false,
+    requestId: null,
+    reason: '',
+  });
+
+  // Estado para Pases de Excepción (Habilitar Modo Excepción por 24h)
+  const [activeTokens, setActiveTokens] = useState<string[]>(['Mariana Rivas']);
+  const [selectedCollaborator, setSelectedCollaborator] = useState<string>('Sofía Valenzuela');
 
   const dispararToast = (tipo: 'exito' | 'error' | 'info', mensaje: string) => {
     setToast({ tipo, mensaje });
@@ -237,6 +270,22 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     setTimeout(() => {
       setToast(null);
     }, 5500);
+  };
+
+  const handleGenerarPase = () => {
+    if (!selectedCollaborator) return;
+    if (!activeTokens.includes(selectedCollaborator)) {
+      setActiveTokens((prev) => [...prev, selectedCollaborator]);
+    }
+    dispararToast(
+      'exito',
+      'Pase generado exitosamente. El colaborador ya puede usar el formulario de excepción.'
+    );
+  };
+
+  const handleRevocarPase = (colaboradorNombre: string) => {
+    setActiveTokens((prev) => prev.filter((item) => item !== colaboradorNombre));
+    dispararToast('info', `Pase de excepción para ${colaboradorNombre} revocado.`);
   };
 
   // LÓGICA DE ESTADO (PASO 5: APROBAR)
@@ -268,16 +317,77 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     );
   };
 
-  // Abrir Modal de Rechazo
-  const handleAbrirRechazo = (sol: SolicitudSubordinado) => {
-    setSolicitudParaRechazar(sol);
-    setMotivoRechazoTexto('');
-    setMotivoRapidoSeleccionado('');
+  // LÓGICA: APROBAR CANCELACIÓN
+  // Al dar clic, el estatus final pasa a Cancelado, se quita de pendientes
+  // y el sistema reincorpora/reembolsa automáticamente los días solicitados al saldo visible del colaborador.
+  const handleAprobarCancelacion = (sol: SolicitudSubordinado) => {
+    const fechaHoy = new Date().toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    setSolicitudes((prev) =>
+      prev.map((item) =>
+        item.id === sol.id
+          ? {
+              ...item,
+              estatus: 'Cancelada',
+              esCancelacion: false,
+              fechaResolucion: fechaHoy,
+              saldoDisponible: item.saldoDisponible + item.dias,
+              saldoActualVacaciones: (item.saldoActualVacaciones ?? item.saldoDisponible) + item.dias,
+            }
+          : item
+      )
+    );
+
+    dispararToast(
+      'exito',
+      `Cancelación aprobada. Se han reintegrado ${sol.dias} día(s) al saldo visible del colaborador.`
+    );
   };
 
-  // LÓGICA DE ESTADO (PASO 5: RECHAZAR CON MOTIVO)
+  // LÓGICA: RECHAZAR CANCELACIÓN
+  // El estatus regresa a Aprobado (la vacación se mantiene activa y los días siguen descontados).
+  const handleRechazarCancelacion = (sol: SolicitudSubordinado) => {
+    const fechaHoy = new Date().toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    setSolicitudes((prev) =>
+      prev.map((item) =>
+        item.id === sol.id
+          ? {
+              ...item,
+              estatus: 'Aprobada',
+              esCancelacion: false,
+              fechaResolucion: fechaHoy,
+            }
+          : item
+      )
+    );
+
+    dispararToast(
+      'info',
+      'Solicitud de cancelación rechazada. La vacación se mantiene activa y los días continúan descontados.'
+    );
+  };
+
+  // Abrir Modal de Rechazo pasando el ID de la solicitud
+  const handleAbrirRechazo = (sol: SolicitudSubordinado) => {
+    setRejectionModal({
+      isOpen: true,
+      requestId: sol.id,
+      reason: '',
+    });
+  };
+
+  // LÓGICA DE ESTADO: CONFIRMAR RECHAZO CON MOTIVO OBLIGATORIO
   const handleConfirmarRechazo = () => {
-    if (!solicitudParaRechazar) return;
+    if (!rejectionModal.requestId || rejectionModal.reason.trim().length < 10) return;
 
     const fechaHoy = new Date().toLocaleDateString('es-MX', {
       day: '2-digit',
@@ -285,18 +395,16 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       year: 'numeric',
     });
 
-    const motivoFinal =
-      motivoRechazoTexto.trim() ||
-      motivoRapidoSeleccionado ||
-      'No especificado por el jefe directo';
+    const solActual = solicitudes.find((s) => s.id === rejectionModal.requestId);
+    const nombreColab = solActual ? solActual.colaboradorNombre : 'el colaborador';
 
     setSolicitudes((prev) =>
       prev.map((item) =>
-        item.id === solicitudParaRechazar.id
+        item.id === rejectionModal.requestId
           ? {
               ...item,
               estatus: 'Rechazada',
-              motivoRechazo: motivoFinal,
+              motivoRechazo: rejectionModal.reason.trim(),
               fechaResolucion: fechaHoy,
             }
           : item
@@ -305,12 +413,14 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 
     dispararToast(
       'error',
-      `Solicitud ${solicitudParaRechazar.id} rechazada. Se ha notificado a ${solicitudParaRechazar.colaboradorNombre} con el motivo indicado.`
+      `Solicitud ${rejectionModal.requestId} rechazada. Se ha notificado por correo a ${nombreColab} con el motivo indicado.`
     );
 
-    setSolicitudParaRechazar(null);
-    setMotivoRechazoTexto('');
-    setMotivoRapidoSeleccionado('');
+    setRejectionModal({
+      isOpen: false,
+      requestId: null,
+      reason: '',
+    });
   };
 
   // =========================================================================
@@ -325,24 +435,33 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       approval.colaboradorNombre.trim().toLowerCase() !== currentUser.name.trim().toLowerCase()
   );
 
-  // Separación de pendientes e historial basada EXCLUSIVAMENTE en filteredApprovals
+  // Separación de pendientes, cancelaciones e historial basada EXCLUSIVAMENTE en filteredApprovals
   const solicitudesPendientes = filteredApprovals.filter((s) => s.estatus === 'Pendiente');
-  const solicitudesHistorial = filteredApprovals.filter((s) => s.estatus !== 'Pendiente');
+  const solicitudesCancelacion = filteredApprovals.filter((s) => s.estatus === 'Pendiente de Cancelación (Jefe)');
+  const solicitudesHistorial = filteredApprovals.filter(
+    (s) => s.estatus !== 'Pendiente' && s.estatus !== 'Pendiente de Cancelación (Jefe)'
+  );
 
   // =========================================================================
   // 4. ACTUALIZACIÓN DE CONTADORES:
   // Todos los totales y tarjetas de resumen se calculan a partir de filteredApprovals
   // =========================================================================
   const totalDiasPendientes = solicitudesPendientes.reduce((acc, curr) => acc + curr.dias, 0);
+  const totalDiasCancelacion = solicitudesCancelacion.reduce((acc, curr) => acc + curr.dias, 0);
 
-  // Sincronizar el conteo de pendientes hacia el componente padre con base en filteredApprovals
+  // Sincronizar el conteo total de pendientes hacia el componente padre con base en filteredApprovals
   React.useEffect(() => {
     if (onPendingCountChange) {
-      onPendingCountChange(solicitudesPendientes.length);
+      onPendingCountChange(solicitudesPendientes.length + solicitudesCancelacion.length);
     }
-  }, [solicitudesPendientes.length, onPendingCountChange]);
+  }, [solicitudesPendientes.length, solicitudesCancelacion.length, onPendingCountChange]);
 
-  const listaAFiltrar = tabActual === 'pendientes' ? solicitudesPendientes : solicitudesHistorial;
+  const listaAFiltrar =
+    tabActual === 'pendientes'
+      ? solicitudesPendientes
+      : tabActual === 'cancelaciones'
+      ? solicitudesCancelacion
+      : solicitudesHistorial;
 
   const solicitudesFiltradas = listaAFiltrar.filter((s) => {
     const cumpleTipo = filtroTipo === 'todos' || s.tipo === filtroTipo;
@@ -412,11 +531,25 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 
           <div className="bg-gray-50 border border-gray-200 rounded p-3">
             <span className="text-[11px] font-medium text-gray-500 block uppercase">
-              Total Días Solicitados
+              Solicitudes de Cancelación
             </span>
             <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-2xl font-bold text-gray-900 tabular-nums">
-                {totalDiasPendientes}
+                {solicitudesCancelacion.length}
+              </span>
+              <span className={`text-xs font-medium ${solicitudesCancelacion.length > 0 ? 'text-amber-700' : 'text-gray-500'}`}>
+                {solicitudesCancelacion.length > 0 ? 'Por autorizar' : 'Sin pendientes'}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 border border-gray-200 rounded p-3">
+            <span className="text-[11px] font-medium text-gray-500 block uppercase">
+              Total Días Involucrados
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span className="text-2xl font-bold text-gray-900 tabular-nums">
+                {totalDiasPendientes + totalDiasCancelacion}
               </span>
               <span className="text-xs text-gray-500 font-medium">días hábiles</span>
             </div>
@@ -424,35 +557,23 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 
           <div className="bg-gray-50 border border-gray-200 rounded p-3">
             <span className="text-[11px] font-medium text-gray-500 block uppercase">
-              Solicitudes de Vacaciones
+              Total de Solicitudes Activas
             </span>
             <div className="flex items-baseline gap-1.5 mt-1">
               <span className="text-2xl font-bold text-gray-900 tabular-nums">
-                {solicitudesPendientes.filter((s) => s.tipo === 'Vacaciones').length}
+                {solicitudesPendientes.length + solicitudesCancelacion.length}
               </span>
-              <span className="text-xs text-gray-500">en trámite</span>
-            </div>
-          </div>
-
-          <div className="bg-gray-50 border border-gray-200 rounded p-3">
-            <span className="text-[11px] font-medium text-gray-500 block uppercase">
-              Solicitudes Días Flex
-            </span>
-            <div className="flex items-baseline gap-1.5 mt-1">
-              <span className="text-2xl font-bold text-gray-900 tabular-nums">
-                {solicitudesPendientes.filter((s) => s.tipo === 'Día Flex').length}
-              </span>
-              <span className="text-xs text-gray-500">en trámite</span>
+              <span className="text-xs text-gray-500">en bandeja</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Controles: Pestañas de Vista (Pendientes vs Historial) y Filtros */}
+      {/* Controles: Pestañas de Vista (Pendientes vs Cancelaciones vs Historial) y Filtros */}
       <div className="bg-white border border-gray-200 rounded-lg p-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Tabs principales */}
-          <div className="flex items-center gap-2 border-b md:border-b-0 border-gray-100 pb-2 md:pb-0">
+          <div className="flex flex-wrap items-center gap-2 border-b md:border-b-0 border-gray-100 pb-2 md:pb-0">
             <button
               onClick={() => setTabActual('pendientes')}
               className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-2 ${
@@ -466,10 +587,30 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                   tabActual === 'pendientes'
                     ? 'bg-white text-blue-700'
-                    : 'bg-amber-100 text-amber-800'
+                    : 'bg-blue-100 text-blue-800'
                 }`}
               >
                 {solicitudesPendientes.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setTabActual('cancelaciones')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-2 ${
+                tabActual === 'cancelaciones'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <span>Solicitudes de Cancelación</span>
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  tabActual === 'cancelaciones'
+                    ? 'bg-white text-amber-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {solicitudesCancelacion.length}
               </span>
             </button>
 
@@ -578,8 +719,8 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                     const esDeficit = sol.dias > sol.saldoDisponible;
 
                     return (
-                      <React.Fragment key={sol.id}>
                         <tr
+                          key={sol.id}
                           className={`transition-colors ${
                             esDeficit
                               ? 'bg-red-50/80 hover:bg-red-100/60 border-l-4 border-l-red-500'
@@ -696,10 +837,22 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                                 Pendiente (Jefe)
                               </span>
                             )}
+                            {sol.estatus === 'Pendiente de Cancelación (Jefe)' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mr-1.5 animate-pulse"></span>
+                                Solicitud de Cancelación
+                              </span>
+                            )}
                             {sol.estatus === 'Aprobada' && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
                                 Aprobada
+                              </span>
+                            )}
+                            {(sol.estatus === 'Cancelada' || sol.estatus === 'Cancelado') && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mr-1.5"></span>
+                                Cancelada (Reversada)
                               </span>
                             )}
                             {sol.estatus === 'Rechazada' && (
@@ -710,9 +863,9 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                             )}
                           </td>
 
-                          {/* Acciones Requeridas: "Aprobar" (verde) y "Rechazar" (rojo) */}
+                          {/* Acciones Requeridas */}
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            {sol.estatus === 'Pendiente' ? (
+                            {sol.estatus === 'Pendiente' && (
                               <div className="inline-flex items-center gap-2 justify-end">
                                 {/* Botón Aprobar: Verde */}
                                 <button
@@ -736,25 +889,41 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                                   <span>Rechazar</span>
                                 </button>
                               </div>
-                            ) : (
+                            )}
+
+                            {sol.estatus === 'Pendiente de Cancelación (Jefe)' && (
+                              <div className="inline-flex items-center gap-2 justify-end">
+                                {/* Botón Aprobar Cancelación */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleAprobarCancelacion(sol)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-none transition-colors cursor-pointer"
+                                  title="Aprobar cancelación y reembolsar los días al saldo visible"
+                                >
+                                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                                  <span>Aprobar Cancelación</span>
+                                </button>
+
+                                {/* Botón Rechazar Cancelación */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRechazarCancelacion(sol)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded text-red-700 bg-white border border-red-300 hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
+                                  title="Rechazar cancelación y mantener los días descontados"
+                                >
+                                  <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                                  <span>Rechazar Cancelación</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {sol.estatus !== 'Pendiente' && sol.estatus !== 'Pendiente de Cancelación (Jefe)' && (
                               <div className="text-[11px] text-gray-500 text-right">
-                                <span>Resuelto: {sol.fechaResolucion}</span>
+                                <span>Resuelto: {sol.fechaResolucion || 'Procesado'}</span>
                               </div>
                             )}
                           </td>
                         </tr>
-
-                        {sol.estatus === 'Rechazada' && sol.motivoRechazo && (
-                          <tr className="bg-gray-50 text-xs">
-                            <td colSpan={9} className="px-4 py-2 text-gray-600 border-t border-gray-100">
-                              <span className="font-semibold text-gray-800">
-                                Motivo del Rechazo:
-                              </span>{' '}
-                              <span>{sol.motivoRechazo}</span>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -809,12 +978,22 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                         className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
                           sol.estatus === 'Pendiente'
                             ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : sol.estatus === 'Pendiente de Cancelación (Jefe)'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300 font-bold'
                             : sol.estatus === 'Aprobada'
                             ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : sol.estatus === 'Cancelada' || sol.estatus === 'Cancelado'
+                            ? 'bg-gray-100 text-gray-700 border border-gray-200'
                             : 'bg-red-50 text-red-800 border border-red-200'
                         }`}
                       >
-                        {sol.estatus === 'Pendiente' ? 'Pendiente' : sol.estatus}
+                        {sol.estatus === 'Pendiente'
+                          ? 'Pendiente'
+                          : sol.estatus === 'Pendiente de Cancelación (Jefe)'
+                          ? 'Solicitud de Cancelación'
+                          : sol.estatus === 'Cancelada' || sol.estatus === 'Cancelado'
+                          ? 'Cancelada (Reversada)'
+                          : sol.estatus}
                       </span>
                       {esDeficit && (
                         <span className="text-[9px] font-bold uppercase text-red-700 bg-red-100 px-1.5 py-0.2 rounded border border-red-200">
@@ -909,12 +1088,6 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                         {sol.fechas}
                       </span>
                     </div>
-
-                    {sol.estatus === 'Rechazada' && sol.motivoRechazo && (
-                      <div className="col-span-2 bg-gray-100 p-2 rounded text-[11px] text-gray-700">
-                        <strong>Motivo de rechazo:</strong> {sol.motivoRechazo}
-                      </div>
-                    )}
                   </div>
 
                 {/* Acciones claras táctiles para móvil */}
@@ -938,9 +1111,29 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                       <span>Rechazar</span>
                     </button>
                   </div>
+                ) : sol.estatus === 'Pendiente de Cancelación (Jefe)' ? (
+                  <div className="pt-2 border-t border-gray-100 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAprobarCancelacion(sol)}
+                      className="w-full py-2.5 px-3 rounded text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 flex items-center justify-center gap-1.5 cursor-pointer shadow-none"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Aprobar Cancelación</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRechazarCancelacion(sol)}
+                      className="w-full py-2.5 px-3 rounded text-xs font-bold text-red-700 bg-white border border-red-300 hover:bg-red-50 active:bg-red-100 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Rechazar Cancelación</span>
+                    </button>
+                  </div>
                 ) : (
                   <div className="pt-2 border-t border-gray-100 text-center text-[11px] text-gray-500">
-                    Resolución registrada el {sol.fechaResolucion}
+                    Resolución registrada el {sol.fechaResolucion || 'Procesado'}
                   </div>
                 )}
               </div>
@@ -951,106 +1144,158 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     )}
 
       {/* ========================================================
-          MODAL: Rechazar Solicitud con Motivo (Opcional / Prompt)
+          SECCIÓN: Herramientas de Jefatura (Zona Administrativa Secundaria)
           ======================================================== */}
-      {solicitudParaRechazar && (
-        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white border border-gray-200 rounded-lg max-w-lg w-full p-6 shadow-none">
-            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-full bg-red-50 text-red-600 border border-red-200 flex items-center justify-center shrink-0">
-                  <X className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-base font-bold text-gray-900">
-                    Rechazar Solicitud
-                  </h4>
-                  <p className="text-xs text-gray-500">
-                    {solicitudParaRechazar.id} · {solicitudParaRechazar.colaboradorNombre}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSolicitudParaRechazar(null)}
-                className="text-gray-400 hover:text-gray-600 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <div className="pt-2">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Herramientas de Jefatura
+          </span>
+          <div className="h-px bg-gray-200 flex-1" />
+        </div>
 
-            <div className="py-4 space-y-4">
-              <div className="bg-gray-50 border border-gray-200 rounded p-3 text-xs text-gray-700">
-                <span className="block font-semibold text-gray-900">
-                  Detalles del trámite:
-                </span>
-                <div className="mt-1">
-                  {solicitudParaRechazar.tipo} · {solicitudParaRechazar.fechas} (
-                  {solicitudParaRechazar.dias} días solicitados)
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {/* Columna Izquierda: Título, Descripción, Select y Botón Outline */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-gray-200/80 text-gray-700 rounded border border-gray-300/70 shrink-0">
+                  <Key className="w-3.5 h-3.5" />
                 </div>
+                <h4 className="text-sm font-bold text-gray-900">
+                  Pases de Excepción (24h)
+                </h4>
               </div>
 
-              {/* Motivos rápidos comunes */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Selecciona una justificación rápida:
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    'Cobertura insuficiente en el equipo',
-                    'Cierre de sprint / entrega crítica de proyecto',
-                    'No cumple con anticipación mínima de 7 días',
-                    'Coincidencia con otro compañero de rol clave',
-                  ].map((motivo) => (
-                    <button
-                      type="button"
-                      key={motivo}
-                      onClick={() => {
-                        setMotivoRapidoSeleccionado(motivo);
-                        setMotivoRechazoTexto(motivo);
-                      }}
-                      className={`text-[11px] px-2.5 py-1 rounded border transition-colors cursor-pointer ${
-                        motivoRapidoSeleccionado === motivo
-                          ? 'bg-red-50 border-red-300 text-red-800 font-semibold'
-                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      {motivo}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Habilita temporalmente el Modo Excepción para que un colaborador de tu equipo pueda registrar solicitudes omitiendo reglas rígidas de anticipación o falta de saldo.
+              </p>
 
-              {/* Campo de texto de motivo */}
-              <div>
-                <label
-                  htmlFor="motivo-rechazo"
-                  className="block text-xs font-semibold text-gray-700 mb-1"
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                <select
+                  value={selectedCollaborator}
+                  onChange={(e) => setSelectedCollaborator(e.target.value)}
+                  className="text-xs rounded border border-gray-300 bg-white text-gray-800 px-3 py-2 focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-400 shadow-2xs"
                 >
-                  Observaciones para el colaborador (Se enviarán por notificación):
-                </label>
-                <textarea
-                  id="motivo-rechazo"
-                  rows={3}
-                  value={motivoRechazoTexto}
-                  onChange={(e) => setMotivoRechazoTexto(e.target.value)}
-                  placeholder="Escribe el motivo del rechazo para que el colaborador pueda reprogramar..."
-                  className="w-full text-xs rounded border border-gray-300 p-2.5 text-gray-900 placeholder-gray-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
-                />
+                  <option value="Sofía Valenzuela">Sofía Valenzuela (EMP-05120)</option>
+                  <option value="Carlos Alberto Méndez">Carlos Alberto Méndez (EMP-05234)</option>
+                  <option value="Diego Morales">Diego Morales (EMP-04981)</option>
+                  <option value="Mariana Rivas">Mariana Rivas (EMP-04812)</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={handleGenerarPase}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-900 active:bg-gray-200 transition-colors cursor-pointer shadow-2xs shrink-0"
+                >
+                  <Key className="w-3.5 h-3.5 text-gray-500" />
+                  <span>Generar Pase</span>
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+            {/* Columna Derecha: Pases Activos Hoy */}
+            <div className="bg-white border border-gray-200 rounded-md p-4 space-y-2.5">
+              <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+                <h5 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                  Pases Activos Hoy
+                </h5>
+                <span className="text-[10px] text-gray-400 font-medium">
+                  {activeTokens.length} activo(s)
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {activeTokens.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic py-1">
+                    No hay pases temporales activos en este momento.
+                  </p>
+                ) : (
+                  activeTokens.map((colab) => (
+                    <span
+                      key={colab}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200/80 shadow-2xs"
+                    >
+                      <span className="text-[10px]">✅</span>
+                      <span className="font-semibold text-emerald-950">{colab}</span>
+                      <span className="text-emerald-700 font-mono text-[10px]">
+                        (Expira hoy 23:59)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRevocarPase(colab)}
+                        className="ml-1 text-emerald-600 hover:text-red-600 font-bold text-xs cursor-pointer transition-colors"
+                        title="Revocar pase"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================
+          MODAL: Rechazar Solicitud con Motivo (UI Centrado)
+          ======================================================== */}
+      {rejectionModal.isOpen && (
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-gray-800">
+              Rechazar Solicitud
+            </h3>
+            <p className="text-sm text-gray-500 mt-2">
+              Por favor, indica el motivo del rechazo. Este mensaje será enviado al colaborador.
+            </p>
+
+            <div className="mt-4">
+              <textarea
+                rows={4}
+                value={rejectionModal.reason}
+                onChange={(e) =>
+                  setRejectionModal((prev) => ({ ...prev, reason: e.target.value }))
+                }
+                placeholder="Escribe el motivo del rechazo (mínimo 10 caracteres)..."
+                className="w-full text-xs rounded-lg border border-gray-300 p-3 text-gray-900 placeholder-gray-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 resize-none"
+              />
+              <div className="flex justify-between items-center mt-1.5">
+                <span className="text-[11px]">
+                  {rejectionModal.reason.trim().length < 10 ? (
+                    <span className="text-amber-600 font-medium">
+                      Mínimo 10 caracteres ({rejectionModal.reason.trim().length}/10)
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 font-semibold">
+                      {rejectionModal.reason.trim().length} caracteres ingresados
+                    </span>
+                  )}
+                </span>
+                {rejectionModal.requestId && (
+                  <span className="text-[10px] text-gray-400 font-mono">
+                    ID: {rejectionModal.requestId}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setSolicitudParaRechazar(null)}
-                className="px-3.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 cursor-pointer"
+                onClick={() =>
+                  setRejectionModal({ isOpen: false, requestId: null, reason: '' })
+                }
+                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
+                disabled={rejectionModal.reason.trim().length < 10}
                 onClick={handleConfirmarRechazo}
-                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 rounded hover:bg-red-700 active:bg-red-800 cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-none"
               >
                 Confirmar Rechazo
               </button>

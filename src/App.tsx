@@ -14,7 +14,8 @@ import {
   Building2,
   FileText,
   HelpCircle,
-  Briefcase
+  Briefcase,
+  X
 } from 'lucide-react';
 import ApprovalsView from './ApprovalsView';
 
@@ -25,7 +26,7 @@ interface Solicitud {
   fechaInicio: string;
   fechaFin: string;
   dias: number;
-  estatus: 'Pendiente de Aprobación (Jefe)' | 'Aprobado' | 'Cancelada (Reversada)';
+  estatus: 'Pendiente de Aprobación (Jefe)' | 'Aprobado' | 'Pendiente de Cancelación (Jefe)' | 'Cancelada (Reversada)';
   esExcepcion?: boolean;
   motivo?: string;
   fechaRegistro: string;
@@ -57,11 +58,34 @@ export default function App() {
   };
 
   // Saldos base
-  const [diasOficiales, setDiasOficiales] = useState(10);
-  const [diasFlexAsignados, setDiasFlexAsignados] = useState(2);
+  const [saldoVacaciones, setSaldoVacaciones] = useState({
+    totalDays: 5,
+    previousPeriod: {
+      days: 1,
+      periodName: 'Período 2024 - 2025',
+      expirationDate: '14/Sep/2026',
+    },
+    currentPeriod: {
+      days: 4,
+      periodName: 'Período 2025 - 2026',
+      expirationDate: '14/Sep/2027',
+    },
+  });
+  const [diasFlexAsignados, setDiasFlexAsignados] = useState(3);
 
   // Historial de solicitudes (con los datos requeridos por la especificación)
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([
+    {
+      id: 'SOL-2026-005',
+      tipo: 'Vacaciones',
+      fechas: '16/Nov - 20/Nov',
+      fechaInicio: '2026-11-16',
+      fechaFin: '2026-11-20',
+      dias: 5,
+      estatus: 'Aprobado',
+      esExcepcion: false,
+      fechaRegistro: '18/Sep/2026',
+    },
     {
       id: 'SOL-2026-004',
       tipo: 'Vacaciones',
@@ -95,6 +119,17 @@ export default function App() {
       esExcepcion: false,
       fechaRegistro: '01/Jul/2026',
     },
+    {
+      id: 'SOL-2026-001',
+      tipo: 'Día Flex',
+      fechas: '14/Feb',
+      fechaInicio: '2026-02-14',
+      fechaFin: '2026-02-14',
+      dias: 1,
+      estatus: 'Aprobado',
+      esExcepcion: false,
+      fechaRegistro: '05/Feb/2026',
+    },
   ]);
 
   // Cálculos dinámicos de saldo
@@ -103,18 +138,27 @@ export default function App() {
     .filter((s) => s.tipo === 'Vacaciones' && s.estatus === 'Pendiente de Aprobación (Jefe)')
     .reduce((acc, curr) => acc + curr.dias, 0);
 
-  // Días de vacaciones ya aprobados y disfrutados o comprometidos en el período
+  // Días de vacaciones ya aprobados (o con cancelación en trámite) y disfrutados o comprometidos en el período
   const diasAprobadosVacaciones = solicitudes
-    .filter((s) => s.tipo === 'Vacaciones' && s.estatus === 'Aprobado')
+    .filter(
+      (s) =>
+        s.tipo === 'Vacaciones' &&
+        (s.estatus === 'Aprobado' || s.estatus === 'Pendiente de Cancelación (Jefe)')
+    )
     .reduce((acc, curr) => acc + curr.dias, 0);
 
-  // Saldo visual disponible = Días Oficiales - Pendientes (como requiere la especificación: "8 días. (10 Días Oficiales - 2 Pendientes)")
-  // Permitimos que empiece en 8 como pide el brief (o calculado)
-  const saldoVacacionesCalculado = Math.max(0, diasOficiales - diasPendientesVacaciones);
+  // Saldo visual disponible de vacaciones
+  const saldoVacacionesCalculado = saldoVacaciones.totalDays;
 
   // Días Flex disponibles
   const diasFlexUsados = solicitudes
-    .filter((s) => s.tipo === 'Día Flex' && (s.estatus === 'Aprobado' || s.estatus === 'Pendiente de Aprobación (Jefe)'))
+    .filter(
+      (s) =>
+        s.tipo === 'Día Flex' &&
+        (s.estatus === 'Aprobado' ||
+          s.estatus === 'Pendiente de Aprobación (Jefe)' ||
+          s.estatus === 'Pendiente de Cancelación (Jefe)')
+    )
     .reduce((acc, curr) => acc + curr.dias, 0);
   const saldoFlexCalculado = Math.max(0, diasFlexAsignados - diasFlexUsados);
 
@@ -128,7 +172,10 @@ export default function App() {
   const [sincronizando, setSincronizando] = useState(false);
   const [modalEdicion, setModalEdicion] = useState<Solicitud | null>(null);
   const [modalConfirmarReversar, setModalConfirmarReversar] = useState<Solicitud | null>(null);
-  const [filtroEstatus, setFiltroEstatus] = useState<'todos' | 'Pendiente' | 'Aprobado'>('todos');
+  const [modalTabuladorVacaciones, setModalTabuladorVacaciones] = useState(false);
+  const [modalPoliticaFlex, setModalPoliticaFlex] = useState(false);
+  const [filtroEstatus, setFiltroEstatus] = useState<'todos' | 'pendientes' | 'aprobados'>('todos');
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Manejador del Login
   const handleLogin = (e: React.FormEvent) => {
@@ -187,10 +234,27 @@ export default function App() {
   // Enviar Nueva Solicitud
   const handleEnviarSolicitud = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
 
     if (!fechaInicio) {
       setMensajeFeedback({ tipo: 'error', texto: 'Por favor selecciona la fecha de inicio.' });
       return;
+    }
+
+    // Regla Días Flex: Calcular diferencia entre fecha de inicio y fecha de fin
+    if (tipoSeleccionado === 'Día Flex') {
+      const fechaFinEfectiva = fechaFin || fechaInicio;
+      const dInicio = new Date(fechaInicio + 'T00:00:00');
+      const dFin = new Date(fechaFinEfectiva + 'T00:00:00');
+      const diffTime = dFin.getTime() - dInicio.getTime();
+      const diffDias = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+      if (diffDias > 1) {
+        setFormError(
+          'Error: Los Días Flex son individuales y no pueden tomarse de forma consecutiva. Selecciona solo un día.'
+        );
+        return;
+      }
     }
 
     if (tipoSeleccionado === 'Vacaciones' && !fechaFin) {
@@ -295,7 +359,37 @@ export default function App() {
     }, 6000);
   };
 
-  // Reversar / Cancelar solicitud aprobada
+  // Fecha actual del sistema para validación de vigencia (23 de Septiembre de 2026)
+  const FECHA_ACTUAL_SISTEMA = '2026-09-23';
+
+  // Regla 1: Bloqueo de Cancelación por Fechas Transcurridas (Fechas Pasadas)
+  // Compara la fecha de fin de la solicitud (fechaFin) contra la fecha actual (today).
+  // Si la fecha ya pasó (fechaFin < today), no es cancelable.
+  const esFechaTranscurrida = (fechaFinStr: string) => {
+    if (!fechaFinStr) return false;
+    return fechaFinStr < FECHA_ACTUAL_SISTEMA;
+  };
+
+  // Regla 2: Solicitud de Cancelación (Requiere Aprobación del Jefe)
+  // Cuando un colaborador hace clic en "Cancelar Solicitud":
+  // No se cancela inmediatamente. El estatus de la solicitud cambia a 'Pendiente de Cancelación (Jefe)'.
+  const handleSolicitarCancelacion = (sol: Solicitud) => {
+    setSolicitudes((prev) =>
+      prev.map((item) =>
+        item.id === sol.id
+          ? { ...item, estatus: 'Pendiente de Cancelación (Jefe)' }
+          : item
+      )
+    );
+    setModalConfirmarReversar(null);
+    setMensajeFeedback({
+      tipo: 'info',
+      texto: `Solicitud de cancelación para ${sol.id} enviada a ${colaborador.jefeDirecto} para su revisión.`,
+    });
+    setTimeout(() => setMensajeFeedback(null), 5000);
+  };
+
+  // Reversar / Cancelar solicitud aprobada (fallback directo para administradores)
   const ejecutarReverso = (sol: Solicitud) => {
     setSolicitudes(
       solicitudes.map((item) =>
@@ -431,7 +525,7 @@ export default function App() {
             <div className="mt-6 pt-4 border-t border-gray-100">
               <div className="text-center text-xs text-gray-500 flex items-center justify-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-gray-400" />
-                <span>Autenticación centralizada · Conexión segura SSL</span>
+                
               </div>
             </div>
           </div>
@@ -445,8 +539,8 @@ export default function App() {
   // ==========================================
   const solicitudesFiltradas = solicitudes.filter((s) => {
     if (filtroEstatus === 'todos') return true;
-    if (filtroEstatus === 'Pendiente') return s.estatus.includes('Pendiente');
-    if (filtroEstatus === 'Aprobado') return s.estatus === 'Aprobado';
+    if (filtroEstatus === 'pendientes') return s.estatus.toLowerCase().includes('pendiente');
+    if (filtroEstatus === 'aprobados') return s.estatus === 'Aprobado';
     return true;
   });
 
@@ -505,9 +599,6 @@ export default function App() {
                 <span>Aprobaciones</span>
                 <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                   {conteoPendientesJefe}
-                </span>
-                <span className="text-[11px] text-gray-500 font-normal">
-                  (Jefe Directo)
                 </span>
               </button>
             </nav>
@@ -638,68 +729,117 @@ export default function App() {
             {/* Tarjeta 1: Saldo de Vacaciones */}
             <div className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col justify-between">
               <div>
+                {/* Encabezado de la Tarjeta con Botón de Información */}
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                     Saldo de Vacaciones
                   </h3>
-                  <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
-                    Ley Federal de Trabajo
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalTabuladorVacaciones(true)}
+                    className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors cursor-pointer"
+                    title="Ver Tabulador Oficial de Vacaciones (LFT)"
+                    aria-label="Ver Tabulador Oficial de Vacaciones (LFT)"
+                  >
+                    <Info className="w-4 h-4" />
+                  </button>
                 </div>
 
+                {/* Total general en grande */}
                 <div className="mt-1 flex items-baseline gap-2">
-                  {/* Número grande requerido (ej. 8 días) */}
                   <span className="text-4xl font-bold text-gray-900 tabular-nums">
-                    {saldoVacacionesCalculado}
+                    {saldoVacaciones.totalDays}
                   </span>
                   <span className="text-base font-medium text-gray-600">
-                    días disponibles
+                    días totales disponibles
                   </span>
                 </div>
 
-                {/* Matemática visual requerida: "(10 Días Oficiales - 2 Pendientes)" */}
-                <div className="mt-3 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2.5 font-mono">
-                  ({diasOficiales} Días Oficiales - {diasPendientesVacaciones} Pendientes)
-                </div>
-              </div>
+                {/* División Visual de los Saldos (UI) */}
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Caja 1 (Período Anterior - Urgente) */}
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-3.5 flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-orange-950 block">
+                        {saldoVacaciones.previousPeriod.periodName}
+                      </span>
+                      <div className="mt-1.5 flex items-baseline gap-1.5">
+                        <span className="text-2xl font-bold text-orange-900 tabular-nums">
+                          {saldoVacaciones.previousPeriod.days}
+                        </span>
+                        <span className="text-xs font-medium text-orange-800">
+                          {saldoVacaciones.previousPeriod.days === 1 ? 'día disponible' : 'días disponibles'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-orange-200/70">
+                      <span className="text-xs font-semibold text-orange-800 inline-flex items-center gap-1">
+                        <span>Vence el:</span>
+                        <span className="font-mono font-bold">{saldoVacaciones.previousPeriod.expirationDate}</span>
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-500 flex items-center justify-between">
-                <span>Período correspondiente: 2025 - 2026</span>
-                <span>Vigencia para disfrutar: 14/Sep/2026</span>
+                  {/* Caja 2 (Período Actual - Regular) */}
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3.5 flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-gray-700 block">
+                        {saldoVacaciones.currentPeriod.periodName}
+                      </span>
+                      <div className="mt-1.5 flex items-baseline gap-1.5">
+                        <span className="text-2xl font-bold text-gray-900 tabular-nums">
+                          {saldoVacaciones.currentPeriod.days}
+                        </span>
+                        <span className="text-xs font-medium text-gray-600">
+                          {saldoVacaciones.currentPeriod.days === 1 ? 'día disponible' : 'días disponibles'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-gray-200">
+                      <span className="text-xs text-gray-600 inline-flex items-center gap-1">
+                        <span>Vence el:</span>
+                        <span className="font-mono font-medium text-gray-800">{saldoVacaciones.currentPeriod.expirationDate}</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Tarjeta 2: Días Flex */}
+            {/* Tarjeta 2: Saldo de Días Flex */}
             <div className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Días Flex
+                    Saldo de Días Flex
                   </h3>
-                  <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
-                    Beneficio Corporativo
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalPoliticaFlex(true)}
+                    className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors cursor-pointer"
+                    title="Ver Política de Beneficio Días Flex"
+                    aria-label="Ver Política de Beneficio Días Flex"
+                  >
+                    <Info className="w-4 h-4" />
+                  </button>
                 </div>
 
                 <div className="mt-1 flex items-baseline gap-2">
-                  {/* Número grande requerido (ej. 2 días) */}
                   <span className="text-4xl font-bold text-gray-900 tabular-nums">
                     {saldoFlexCalculado}
                   </span>
                   <span className="text-base font-medium text-gray-600">
-                    días disponibles
+                    {saldoFlexCalculado === 1 ? 'día disponible' : 'días disponibles'}
                   </span>
                 </div>
 
-                {/* Texto explicativo */}
-                <div className="mt-3 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2.5 font-mono">
-                  ({diasFlexAsignados} Días asignados cuatrimestrales - {diasFlexUsados} Utilizados/En trámite)
+                {/* Contenedor ajustado al texto */}
+                <div className="mt-4 w-fit bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex items-center">
+                  <span className="text-xs text-gray-600 inline-flex items-center gap-1">
+                    <span>Vence el:</span>
+                    <span className="font-mono font-medium text-gray-800">31/Dic/2026</span>
+                  </span>
                 </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-500 flex items-center justify-between">
-                <span>Renovación cuatrimestral: 01/Ene/2027</span>
-                <span>No acumulables entre períodos</span>
               </div>
             </div>
           </div>
@@ -730,7 +870,10 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => setTipoSeleccionado('Vacaciones')}
+                      onClick={() => {
+                        setTipoSeleccionado('Vacaciones');
+                        if (formError) setFormError(null);
+                      }}
                       className={`py-2 px-3 text-xs font-medium rounded border text-center transition-colors cursor-pointer ${
                         tipoSeleccionado === 'Vacaciones'
                           ? 'bg-blue-50 border-blue-600 text-blue-700 font-semibold'
@@ -741,7 +884,10 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setTipoSeleccionado('Día Flex')}
+                      onClick={() => {
+                        setTipoSeleccionado('Día Flex');
+                        if (formError) setFormError(null);
+                      }}
                       className={`py-2 px-3 text-xs font-medium rounded border text-center transition-colors cursor-pointer ${
                         tipoSeleccionado === 'Día Flex'
                           ? 'bg-blue-50 border-blue-600 text-blue-700 font-semibold'
@@ -769,9 +915,10 @@ export default function App() {
                       value={fechaInicio}
                       onChange={(e) => {
                         setFechaInicio(e.target.value);
-                        if (tipoSeleccionado === 'Día Flex') {
+                        if (tipoSeleccionado === 'Día Flex' && !fechaFin) {
                           setFechaFin(e.target.value);
                         }
+                        if (formError) setFormError(null);
                       }}
                       className="w-full text-xs rounded border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
                     />
@@ -782,17 +929,19 @@ export default function App() {
                       htmlFor="fecha-fin"
                       className="block text-xs font-medium text-gray-700 mb-1"
                     >
-                      Fecha de fin
+                      Fecha de fin {tipoSeleccionado === 'Día Flex' && <span className="text-gray-400 font-normal">(individual)</span>}
                     </label>
                     <input
                       id="fecha-fin"
                       type="date"
                       required={tipoSeleccionado === 'Vacaciones'}
-                      disabled={tipoSeleccionado === 'Día Flex'}
-                      value={tipoSeleccionado === 'Día Flex' ? fechaInicio : fechaFin}
-                      onChange={(e) => setFechaFin(e.target.value)}
+                      value={tipoSeleccionado === 'Día Flex' ? (fechaFin || fechaInicio) : fechaFin}
+                      onChange={(e) => {
+                        setFechaFin(e.target.value);
+                        if (formError) setFormError(null);
+                      }}
                       min={fechaInicio || undefined}
-                      className="w-full text-xs rounded border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 disabled:bg-gray-100 disabled:text-gray-400"
+                      className="w-full text-xs rounded border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
                     />
                   </div>
                 </div>
@@ -930,6 +1079,14 @@ export default function App() {
                             El botón se habilitará al completar la justificación obligatoria (mínimo 10 caracteres).
                           </p>
                         )}
+
+                        {/* Banner de error de validación visual para Días Flex u otras reglas */}
+                        {formError && (
+                          <div className="mt-3 bg-red-50 text-red-700 border-l-4 border-red-500 p-3 rounded text-xs flex items-start gap-2 animate-fadeIn">
+                            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                            <span className="font-medium leading-relaxed">{formError}</span>
+                          </div>
+                        )}
                       </>
                     );
                   })()}
@@ -967,9 +1124,9 @@ export default function App() {
                     Todos
                   </button>
                   <button
-                    onClick={() => setFiltroEstatus('Pendiente')}
+                    onClick={() => setFiltroEstatus('pendientes')}
                     className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                      filtroEstatus === 'Pendiente'
+                      filtroEstatus === 'pendientes'
                         ? 'bg-white text-gray-900 font-semibold shadow-xs'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
@@ -977,9 +1134,9 @@ export default function App() {
                     Pendientes
                   </button>
                   <button
-                    onClick={() => setFiltroEstatus('Aprobado')}
+                    onClick={() => setFiltroEstatus('aprobados')}
                     className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                      filtroEstatus === 'Aprobado'
+                      filtroEstatus === 'aprobados'
                         ? 'bg-white text-gray-900 font-semibold shadow-xs'
                         : 'text-gray-600 hover:text-gray-900'
                     }`}
@@ -989,35 +1146,35 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Tabla simple requerida */}
+              {/* Tabla optimizada en espacio sin scroll horizontal forzado */}
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50 text-gray-600 font-semibold uppercase tracking-wider text-[11px]">
-                      <th className="py-3 px-4">Tipo</th>
-                      <th className="py-3 px-4">Fechas</th>
-                      <th className="py-3 px-4">Días Solicitados</th>
-                      <th className="py-3 px-4">Estatus</th>
-                      <th className="py-3 px-4 text-right">Acciones</th>
+                      <th className="py-2.5 px-3">Tipo</th>
+                      <th className="py-2.5 px-3">Fechas</th>
+                      <th className="py-2.5 px-3">Días</th>
+                      <th className="py-2.5 px-3">Estatus</th>
+                      <th className="py-2.5 px-3 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {solicitudesFiltradas.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-gray-400">
-                          No hay solicitudes para el filtro seleccionado.
+                          No hay solicitudes pendientes en este momento.
                         </td>
                       </tr>
                     ) : (
                       solicitudesFiltradas.map((sol) => (
                         <tr key={sol.id} className="hover:bg-gray-50/75 transition-colors">
                           {/* Columna Tipo */}
-                          <td className="py-3.5 px-4 font-medium text-gray-900 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
+                          <td className="py-2 px-3 font-medium text-gray-900">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span>{sol.tipo}</span>
                               {sol.esExcepcion && (
                                 <span
-                                  className="text-[10px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.2 rounded font-mono"
+                                  className="text-[9px] bg-red-50 text-red-700 border border-red-200 px-1 py-0.2 rounded font-mono"
                                   title={`Motivo: ${sol.motivo || 'Excepción'}`}
                                 >
                                   Excepción
@@ -1030,60 +1187,86 @@ export default function App() {
                           </td>
 
                           {/* Columna Fechas */}
-                          <td className="py-3.5 px-4 text-gray-700 whitespace-nowrap font-mono">
+                          <td className="py-2 px-3 text-gray-700 whitespace-nowrap font-mono text-xs">
                             {sol.fechas}
                           </td>
 
                           {/* Columna Días solicitados */}
-                          <td className="py-3.5 px-4 text-gray-900 whitespace-nowrap font-medium tabular-nums">
+                          <td className="py-2 px-3 text-gray-900 whitespace-nowrap font-medium tabular-nums text-xs">
                             {sol.dias} {sol.dias === 1 ? 'día' : 'días'}
                           </td>
 
-                          {/* Columna Estatus (Badges requeridos) */}
-                          <td className="py-3.5 px-4 whitespace-nowrap">
+                          {/* Columna Estatus (Badges compactos sin "Jefe") */}
+                          <td className="py-2 px-3 whitespace-nowrap">
                             {sol.estatus === 'Pendiente de Aprobación (Jefe)' && (
-                              /* Badge amarillo requerido */
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span>
-                                Pendiente de Aprobación (Jefe)
+                                Pendiente de Aprobación
+                              </span>
+                            )}
+
+                            {sol.estatus === 'Pendiente de Cancelación (Jefe)' && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mr-1.5 animate-pulse"></span>
+                                Pendiente de Cancelación
                               </span>
                             )}
 
                             {sol.estatus === 'Aprobado' && (
-                              /* Badge verde requerido */
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
                                 Aprobado
                               </span>
                             )}
 
                             {sol.estatus === 'Cancelada (Reversada)' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1.5"></span>
-                                Cancelada (Reversada)
+                                Cancelada
                               </span>
                             )}
                           </td>
 
                           {/* Columna Acciones */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <td className="py-2 px-3 text-right whitespace-nowrap">
                             {sol.estatus === 'Pendiente de Aprobación (Jefe)' && (
-                              <button
-                                onClick={() => setModalEdicion(sol)}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline cursor-pointer"
-                              >
-                                Editar
-                              </button>
+                              <div className="inline-flex items-center justify-end gap-2.5">
+                                <button
+                                  onClick={() => setModalEdicion(sol)}
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline cursor-pointer"
+                                >
+                                  Editar
+                                </button>
+                                {esFechaTranscurrida(sol.fechaFin) ? (
+                                  <span className="text-xs text-gray-400 italic">Fecha transcurrida</span>
+                                ) : (
+                                  <button
+                                    onClick={() => setModalConfirmarReversar(sol)}
+                                    className="text-xs text-red-600 hover:text-red-800 font-medium hover:underline cursor-pointer"
+                                  >
+                                    Cancelar Solicitud
+                                  </button>
+                                )}
+                              </div>
                             )}
 
                             {sol.estatus === 'Aprobado' && (
-                              /* Botón o link sutil rojo que diga "Cancelar Solicitud (Reversar)" */
-                              <button
-                                onClick={() => setModalConfirmarReversar(sol)}
-                                className="text-xs text-red-600 hover:text-red-800 font-medium hover:underline cursor-pointer"
-                              >
-                                Cancelar Solicitud (Reversar)
-                              </button>
+                              esFechaTranscurrida(sol.fechaFin) ? (
+                                <span className="text-xs text-gray-400 italic">Fecha transcurrida</span>
+                              ) : (
+                                <button
+                                  onClick={() => setModalConfirmarReversar(sol)}
+                                  className="text-xs text-red-600 hover:text-red-800 font-medium hover:underline cursor-pointer"
+                                >
+                                  Cancelar Solicitud
+                                </button>
+                              )
+                            )}
+
+                            {sol.estatus === 'Pendiente de Cancelación (Jefe)' && (
+                              <span className="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                                Cancelación en revisión
+                              </span>
                             )}
 
                             {sol.estatus === 'Cancelada (Reversada)' && (
@@ -1104,7 +1287,7 @@ export default function App() {
                 </span>
                 <span className="flex items-center gap-1.5 text-gray-600">
                   <ShieldCheck className="w-3.5 h-3.5 text-gray-400" />
-                  Firmado digitalmente bajo política corporativa Ayvi
+                  
                 </span>
               </div>
             </div>
@@ -1126,26 +1309,33 @@ export default function App() {
   </main>
 
       {/* ========================================================
-          MODAL: Cancelar Solicitud (Reversar)
+          MODAL: Solicitar Cancelación al Jefe Directo
           ======================================================== */}
       {modalConfirmarReversar && (
         <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-6 shadow-none">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 border border-red-200 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
                 <AlertCircle className="w-5 h-5" />
               </div>
               <div>
                 <h4 className="text-base font-bold text-gray-900">
-                  ¿Confirmas reversar esta solicitud?
+                  ¿Solicitar cancelación de esta solicitud?
                 </h4>
                 <p className="text-xs text-gray-600 mt-1">
-                  Estás a punto de cancelar la solicitud aprobada de{' '}
+                  Estás a punto de solicitar la cancelación de tu solicitud de{' '}
                   <strong className="text-gray-900">{modalConfirmarReversar.tipo}</strong> ({modalConfirmarReversar.fechas}).
                 </p>
-                <div className="mt-3 bg-gray-50 border border-gray-200 rounded p-2.5 text-xs text-gray-700">
-                  <strong>Efecto en tu saldo:</strong> Se reintegrarán automáticamente{' '}
-                  <span className="font-semibold text-gray-900">{modalConfirmarReversar.dias} día(s)</span> a tu saldo oficial en Intelexion.
+                <div className="mt-3 bg-amber-50/75 border border-amber-200 rounded p-2.5 text-xs text-amber-950 space-y-1.5">
+                  <p>
+                    <strong>Aprobación requerida:</strong> La solicitud pasará a estatus{' '}
+                    <span className="font-semibold text-amber-800">Pendiente de Cancelación (Jefe)</span> y será revisada por tu jefe directo (
+                    <span className="font-semibold text-gray-900">{colaborador.jefeDirecto}</span>).
+                  </p>
+                  <p className="text-[11px] text-amber-900">
+                    Al ser aprobada la cancelación, el sistema reembolsará automáticamente{' '}
+                    <strong>{modalConfirmarReversar.dias} día(s)</strong> a tu saldo visible.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1156,14 +1346,14 @@ export default function App() {
                 onClick={() => setModalConfirmarReversar(null)}
                 className="px-3.5 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 cursor-pointer"
               >
-                No, mantenerla
+                No, mantener activa
               </button>
               <button
                 type="button"
-                onClick={() => ejecutarReverso(modalConfirmarReversar)}
-                className="px-3.5 py-2 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 cursor-pointer"
+                onClick={() => handleSolicitarCancelacion(modalConfirmarReversar)}
+                className="px-3.5 py-2 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded cursor-pointer transition-colors"
               >
-                Sí, Cancelar y Reversar
+                Confirmar Solicitud de Cancelación
               </button>
             </div>
           </div>
@@ -1320,6 +1510,179 @@ export default function App() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: Tabulador Oficial de Vacaciones (LFT)
+          ======================================================== */}
+      {modalTabuladorVacaciones && (
+        <div
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn"
+          onClick={() => setModalTabuladorVacaciones(false)}
+        >
+          <div
+            className="bg-white border border-gray-200 rounded-xl max-w-md w-full p-5 sm:p-6 shadow-xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera del modal */}
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 shrink-0">
+                  <Info className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-gray-900">
+                    Tabulador Oficial de Vacaciones (LFT)
+                  </h4>
+                  <p className="text-xs text-gray-500">Ley Federal del Trabajo (México)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalTabuladorVacaciones(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded cursor-pointer transition-colors"
+                aria-label="Cerrar modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabla de 2 Columnas (Años Laborados vs Días de Vacaciones) */}
+            <div className="my-4 max-h-72 overflow-y-auto border border-gray-200 rounded-lg">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold sticky top-0">
+                  <tr>
+                    <th className="py-2.5 px-3.5">Años Laborados</th>
+                    <th className="py-2.5 px-3.5 text-right">Días de Vacaciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-800 font-medium">
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">1 Año</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">12 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">2 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">14 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">3 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">16 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">4 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">18 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">5 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">20 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">6 a 10 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">22 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">11 a 15 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">24 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">16 a 20 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">26 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">21 a 25 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">28 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">26 a 30 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">30 Días</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50/70">
+                    <td className="py-2 px-3.5">31 a 35 Años</td>
+                    <td className="py-2 px-3.5 text-right font-bold text-blue-700">32 Días</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Texto explicativo al pie del modal */}
+            <p className="text-[11px] text-gray-500 bg-gray-50 p-2.5 rounded border border-gray-200 leading-relaxed">
+              Los días de vacaciones se actualizan automáticamente en la fecha de tu aniversario laboral según tus años de antigüedad acumulados.
+            </p>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setModalTabuladorVacaciones(false)}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md cursor-pointer transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: Política de Beneficio Días Flex
+          ======================================================== */}
+      {modalPoliticaFlex && (
+        <div
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn"
+          onClick={() => setModalPoliticaFlex(false)}
+        >
+          <div
+            className="bg-white border border-gray-200 rounded-xl max-w-md w-full p-5 sm:p-6 shadow-xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera del modal */}
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 shrink-0">
+                  <Info className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-bold text-gray-900">
+                    Política de Beneficio Días Flex
+                  </h4>
+                  <p className="text-xs text-gray-500">Beneficio Corporativo</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalPoliticaFlex(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded cursor-pointer transition-colors"
+                aria-label="Cerrar modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Contenido explicativo */}
+            <div className="my-4 space-y-3">
+              <div className="p-3.5 bg-blue-50/50 border border-blue-100 rounded-lg text-xs text-gray-700 leading-relaxed">
+                Los Días Flex son un beneficio de hasta <strong>3 días al año</strong>. Se renuevan el 1 de enero de cada año y vencen el 31 de diciembre.
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 font-medium flex items-start gap-2">
+                <span className="shrink-0 mt-0.5">⚠️</span>
+                <span>
+                  <strong>Importante:</strong> Este beneficio no es acumulable de un año para otro.
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setModalPoliticaFlex(false)}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md cursor-pointer transition-colors"
+              >
+                Entendido
+              </button>
+            </div>
           </div>
         </div>
       )}
