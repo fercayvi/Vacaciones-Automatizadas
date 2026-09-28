@@ -389,7 +389,7 @@ export const TyCReportsView: React.FC = () => {
       <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 font-mono">Modo Solo Lectura</span>
+            <span className="text-xs text-gray-500 font-mono">ESTA VISTA ES SOLO PARA GENERALISTAS</span>
           </div>
           <h2 className="text-xl font-bold text-gray-900 mt-1">
             Panel de Talento y Cultura
