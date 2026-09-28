@@ -10,16 +10,21 @@ import {
   HelpCircle,
   FileCheck2,
   ArrowUpDown,
-  Building2,
-  CalendarRange
+  CalendarRange,
+  AlertCircle,
+  MessageSquare,
+  X,
+  Eye
 } from 'lucide-react';
+import RequestDetailsModal from './RequestDetailsModal';
 
 export interface TyCRequestRecord {
   id: string;
+  folio: string;
   nomina: string;
   colaborador: string;
   departamento: string;
-  tipo: 'Vacaciones' | 'Día Flex';
+  tipo: 'Vacaciones' | 'Día Flex' | 'Home week';
   fechaInicio: string; // YYYY-MM-DD
   fechaFin: string;    // YYYY-MM-DD
   dias: number;
@@ -27,11 +32,15 @@ export interface TyCRequestRecord {
   esExcepcion: boolean;
   motivoExcepcion?: string;
   jefeDirecto?: string;
+  saldoDisponible?: number;
+  fechaSolicitud?: string;
+  comentarios?: string;
 }
 
 export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
   {
-    id: 'SOL-2026-008',
+    id: 'FOL-2026-008',
+    folio: 'FOL-2026-008',
     nomina: 'EMP-05309',
     colaborador: 'Alejandro Morales Cruz',
     departamento: 'Ingeniería y TI',
@@ -39,12 +48,16 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-10-09',
     fechaFin: '2026-10-15',
     dias: 5,
+    saldoDisponible: 10,
+    fechaSolicitud: '20/Sep/2026',
+    comentarios: '',
     estatus: 'Pendiente',
     esExcepcion: false,
     jefeDirecto: 'Emmanuel Muñoz',
   },
   {
-    id: 'SOL-2026-007',
+    id: 'FOL-2026-007',
+    folio: 'FOL-2026-007',
     nomina: 'EMP-04981',
     colaborador: 'Mariana Rivas Pacheco',
     departamento: 'Calidad de Software',
@@ -52,13 +65,17 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-10-18',
     fechaFin: '2026-10-21',
     dias: 3,
+    saldoDisponible: 0,
+    fechaSolicitud: '22/Sep/2026',
+    comentarios: 'Permiso sin saldo por fuerza mayor médica familiar.',
     estatus: 'Pendiente',
     esExcepcion: true,
     motivoExcepcion: 'Permiso sin saldo por fuerza mayor médica familiar (aniversario 2027 anticipado).',
     jefeDirecto: 'Emmanuel Muñoz',
   },
   {
-    id: 'SOL-2026-005',
+    id: 'FOL-2026-005',
+    folio: 'FOL-2026-005',
     nomina: 'EMP-05120',
     colaborador: 'Sofía Valenzuela Mendoza',
     departamento: 'Diseño e Innovación',
@@ -66,12 +83,16 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-09-28',
     fechaFin: '2026-09-28',
     dias: 1,
+    saldoDisponible: 2,
+    fechaSolicitud: '18/Sep/2026',
+    comentarios: '',
     estatus: 'Pendiente',
     esExcepcion: false,
     jefeDirecto: 'Emmanuel Muñoz',
   },
   {
-    id: 'SOL-2026-006',
+    id: 'FOL-2026-006',
+    folio: 'FOL-2026-006',
     nomina: 'EMP-05234',
     colaborador: 'Carlos Alberto Méndez',
     departamento: 'Arquitectura de Datos',
@@ -79,12 +100,16 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-11-03',
     fechaFin: '2026-11-07',
     dias: 4,
+    saldoDisponible: 6,
+    fechaSolicitud: '25/Sep/2026',
+    comentarios: '',
     estatus: 'Pendiente',
     esExcepcion: false,
     jefeDirecto: 'Emmanuel Muñoz',
   },
   {
-    id: 'SOL-2026-002',
+    id: 'FOL-2026-002',
+    folio: 'FOL-2026-002',
     nomina: 'EMP-05120',
     colaborador: 'Sofía Valenzuela Mendoza',
     departamento: 'Diseño e Innovación',
@@ -92,12 +117,16 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-08-14',
     fechaFin: '2026-08-15',
     dias: 2,
+    saldoDisponible: 8,
+    fechaSolicitud: '01/Ago/2026',
+    comentarios: '',
     estatus: 'Aprobada',
     esExcepcion: false,
     jefeDirecto: 'Emmanuel Muñoz',
   },
   {
-    id: 'SOL-2026-012',
+    id: 'FOL-2026-012',
+    folio: 'FOL-2026-012',
     nomina: 'EMP-04721',
     colaborador: 'Diego Gutiérrez Ponce',
     departamento: 'Operaciones y Logística',
@@ -105,13 +134,17 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-10-05',
     fechaFin: '2026-10-09',
     dias: 5,
+    saldoDisponible: 5,
+    fechaSolicitud: '29/Sep/2026',
+    comentarios: 'Anticipación menor a 7 días autorizada mediante pase de excepción de jefatura.',
     estatus: 'Aprobada',
     esExcepcion: true,
     motivoExcepcion: 'Anticipación menor a 7 días autorizada mediante pase de excepción de jefatura.',
     jefeDirecto: 'Lic. Laura Benítez',
   },
   {
-    id: 'SOL-2026-010',
+    id: 'FOL-2026-010',
+    folio: 'FOL-2026-010',
     nomina: 'EMP-05519',
     colaborador: 'Elena Luna Fuentes',
     departamento: 'Compensaciones',
@@ -119,12 +152,16 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-09-18',
     fechaFin: '2026-09-18',
     dias: 1,
+    saldoDisponible: 1,
+    fechaSolicitud: '10/Sep/2026',
+    comentarios: '',
     estatus: 'Aprobada',
     esExcepcion: false,
     jefeDirecto: 'Emmanuel Muñoz',
   },
   {
-    id: 'SOL-2026-001',
+    id: 'FOL-2026-001',
+    folio: 'FOL-2026-001',
     nomina: 'EMP-05234',
     colaborador: 'Carlos Alberto Méndez',
     departamento: 'Arquitectura de Datos',
@@ -132,12 +169,16 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-08-01',
     fechaFin: '2026-08-01',
     dias: 1,
+    saldoDisponible: 3,
+    fechaSolicitud: '28/Jul/2026',
+    comentarios: '',
     estatus: 'Rechazada',
     esExcepcion: false,
     jefeDirecto: 'Emmanuel Muñoz',
   },
   {
-    id: 'SOL-2026-003',
+    id: 'FOL-2026-003',
+    folio: 'FOL-2026-003',
     nomina: 'EMP-05411',
     colaborador: 'Raúl Domínguez Soto',
     departamento: 'Ingeniería y TI',
@@ -145,12 +186,16 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-09-10',
     fechaFin: '2026-09-15',
     dias: 4,
+    saldoDisponible: 4,
+    fechaSolicitud: '01/Sep/2026',
+    comentarios: '',
     estatus: 'Expirado por Sistema',
     esExcepcion: false,
     jefeDirecto: 'Ing. Mateo Estrada',
   },
   {
-    id: 'SOL-2026-014',
+    id: 'FOL-2026-014',
+    folio: 'FOL-2026-014',
     nomina: 'EMP-04112',
     colaborador: 'Roberto Garza Salazar',
     departamento: 'Ciberseguridad',
@@ -158,6 +203,9 @@ export const MOCK_ALL_REQUESTS: TyCRequestRecord[] = [
     fechaInicio: '2026-11-16',
     fechaFin: '2026-11-20',
     dias: 5,
+    saldoDisponible: 12,
+    fechaSolicitud: '05/Nov/2026',
+    comentarios: 'Excepción de días no consecutivos autorizada por Dirección de TyC.',
     estatus: 'Aprobada',
     esExcepcion: true,
     motivoExcepcion: 'Excepción de días no consecutivos autorizada por Dirección de TyC.',
@@ -174,6 +222,17 @@ export const TyCReportsView: React.FC = () => {
   const [selectedExcepcion, setSelectedExcepcion] = useState<'Todos' | 'Solo Excepciones' | 'Regulares'>('Todos');
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+  const [activeComment, setActiveComment] = useState<string | null>(null);
+  const [activeCommentAuthor, setActiveCommentAuthor] = useState<string>('');
+
+  // Estado para el modal de vista detallada (Master-Detail para Auditoría)
+  const [selectedRequestForModal, setSelectedRequestForModal] = useState<TyCRequestRecord | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  const handleOpenDetails = (item: TyCRequestRecord) => {
+    setSelectedRequestForModal(item);
+    setIsDetailsModalOpen(true);
+  };
 
   // Lista de departamentos única
   const departamentos = useMemo(() => {
@@ -503,6 +562,7 @@ export const TyCReportsView: React.FC = () => {
               <option value="Todos">Todos los Tipos</option>
               <option value="Vacaciones">Vacaciones</option>
               <option value="Día Flex">Día Flex</option>
+              <option value="Home week">Home week</option>
             </select>
           </div>
 
@@ -608,141 +668,200 @@ export const TyCReportsView: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs table-auto">
+            <table className="w-full text-left border-collapse text-[13px] table-auto">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-gray-600 font-semibold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-3">Colaborador / Nómina</th>
-                  <th className="py-3 px-3">Departamento</th>
-                  <th className="py-3 px-3">Tipo</th>
-                  <th className="py-3 px-3">Período de Ausencia</th>
-                  <th className="py-3 px-3">Días</th>
-                  <th className="py-3 px-3">Auditoría / Excepción</th>
-                  <th className="py-3 px-3">Líder Directo</th>
-                  <th className="py-3 px-3 text-right">Estatus</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Acciones</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Folio</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Colaborador</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Nómina</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Departamento</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Tipo</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Rango de Fechas</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Días</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Saldo Disp.</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Fecha Sol.</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Comentarios</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Jefe Directo</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Estatus</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {filteredData.map((item) => (
-                  <tr
-                    key={item.id}
-                    className={`transition-colors ${
-                      item.esExcepcion
-                        ? 'bg-amber-50/40 hover:bg-amber-50/70 border-l-4 border-l-amber-500'
-                        : 'hover:bg-gray-50/75'
-                    }`}
-                  >
-                    {/* 1. Colaborador / Nómina */}
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-bold text-[10px] shrink-0 border border-gray-300">
-                          {item.colaborador
-                            .split(' ')
-                            .map((n) => n[0])
-                            .slice(0, 2)
-                            .join('')}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-gray-900 leading-tight">
-                            {item.colaborador}
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] text-gray-500 font-mono font-normal bg-gray-100 px-1 py-0.2 rounded border border-gray-200">
-                              {item.nomina}
-                            </span>
-                            <span className="text-[10px] text-gray-400 font-mono">
-                              {item.id}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
+                {filteredData.map((item) => {
+                  const saldoDisp = item.saldoDisponible ?? (item.esExcepcion ? 0 : 10);
+                  const sinSaldoODeficit = saldoDisp <= 0 || item.dias > saldoDisp;
+                  const esExcepcion = Boolean(item.esExcepcion || sinSaldoODeficit);
 
-                    {/* 2. Departamento */}
-                    <td className="py-3 px-3 text-gray-700">
-                      <span className="inline-flex items-center gap-1">
-                        <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                        <span>{item.departamento}</span>
-                      </span>
-                    </td>
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`transition-colors ${
+                        esExcepcion
+                          ? 'bg-red-100 hover:bg-red-200/80 border-l-4 border-red-500'
+                          : 'hover:bg-gray-50/75'
+                      }`}
+                    >
+                      {/* 1. Acciones (Master-Detail Modo Auditoría - Primera Columna) */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDetails(item)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 active:bg-gray-100 rounded-md transition-colors cursor-pointer shadow-xs"
+                          title="Ver detalles de la solicitud"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-gray-500" />
+                          <span>Revisar</span>
+                        </button>
+                      </td>
 
-                    {/* 3. Tipo */}
-                    <td className="py-3 px-3">
-                      <span className="font-medium text-gray-900">
-                        {item.tipo}
-                      </span>
-                    </td>
+                      {/* 2. Folio */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="font-mono text-gray-500 font-normal text-[13px]">
+                          {item.folio || item.id}
+                        </span>
+                      </td>
 
-                    {/* 4. Período de Ausencia */}
-                    <td className="py-3 px-3 font-mono text-[11px] text-gray-800 leading-tight whitespace-nowrap">
-                      {formatearFechaVisual(item.fechaInicio)} - {formatearFechaVisual(item.fechaFin)}
-                    </td>
+                      {/* 2. Colaborador */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="font-medium text-gray-800 text-[13px] leading-tight">
+                          {item.colaborador}
+                        </span>
+                      </td>
 
-                    {/* 5. Días Hábiles */}
-                    <td className="py-3 px-3 tabular-nums whitespace-nowrap">
-                      <span className="inline-block bg-gray-100 text-gray-800 px-2 py-0.5 rounded border border-gray-200 font-semibold text-[11px]">
-                        {item.dias} {item.dias === 1 ? 'día' : 'días'}
-                      </span>
-                    </td>
+                      {/* 3. Nómina */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="font-mono text-gray-600 font-normal text-[13px] bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                          {item.nomina}
+                        </span>
+                      </td>
 
-                    {/* 6. Auditoría / Excepción */}
-                    <td className="py-3 px-3">
-                      {item.esExcepcion ? (
-                        <div className="space-y-1">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                            <AlertTriangle className="w-3 h-3 text-amber-700 shrink-0" />
-                            <span>Alerta: Excepción</span>
-                          </span>
-                          {item.motivoExcepcion && (
-                            <p
-                              className="text-[10px] text-amber-800 leading-tight line-clamp-2 max-w-xs"
-                              title={item.motivoExcepcion}
+                      {/* 4. Departamento */}
+                      <td className="py-2.5 px-3 whitespace-nowrap text-[13px] text-gray-600 font-normal">
+                        {item.departamento}
+                      </td>
+
+                      {/* 5. Tipo */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-gray-700 font-normal text-[13px]">{item.tipo}</span>
+                          {item.esExcepcion && (
+                            <span
+                              className="text-[10px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.2 rounded font-mono font-medium"
+                              title={item.motivoExcepcion || 'Excepción'}
                             >
-                              {item.motivoExcepcion}
-                            </p>
+                              Excepción
+                            </span>
                           )}
                         </div>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-gray-500 font-medium">
-                          <FileCheck2 className="w-3.5 h-3.5 text-gray-400" />
-                          <span>Regla regular</span>
-                        </span>
-                      )}
-                    </td>
+                      </td>
 
-                    {/* 7. Líder Directo */}
-                    <td className="py-3 px-3 text-gray-600 text-xs">
-                      {item.jefeDirecto || 'Emmanuel Muñoz'}
-                    </td>
+                      {/* 6. Rango de Fechas */}
+                      <td className="py-2.5 px-3 font-mono text-gray-600 font-normal text-[13px] leading-tight whitespace-nowrap">
+                        {formatearFechaVisual(item.fechaInicio)} - {formatearFechaVisual(item.fechaFin)}
+                      </td>
 
-                    {/* 8. Estatus */}
-                    <td className="py-3 px-3 text-right whitespace-nowrap">
-                      {item.estatus === 'Pendiente' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />
-                          Pendiente
+                      {/* 7. Días Hábiles */}
+                      <td className="py-2.5 px-3 whitespace-nowrap tabular-nums">
+                        <span className="text-gray-700 font-normal text-[13px]">
+                          {item.dias} {item.dias === 1 ? 'día' : 'días'}
                         </span>
-                      )}
-                      {item.estatus === 'Aprobada' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
-                          Aprobada
-                        </span>
-                      )}
-                      {item.estatus === 'Rechazada' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-800 border border-red-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5" />
-                          Rechazada
-                        </span>
-                      )}
-                      {item.estatus === 'Expirado por Sistema' && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-300">
-                          <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1.5" />
-                          Expirado
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+
+                      {/* 8. Saldo Disponible (limpio sin badge de 'Déficit') */}
+                      <td className="py-2.5 px-3 whitespace-nowrap tabular-nums">
+                        {sinSaldoODeficit ? (
+                          <div className="flex items-center gap-1.5 whitespace-nowrap">
+                            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                            <span className="text-red-600 font-medium text-[13px] whitespace-nowrap">
+                              {saldoDisp <= 0 ? '0 días' : `${saldoDisp} ${saldoDisp === 1 ? 'día' : 'días'}`}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-600 font-normal text-[13px] whitespace-nowrap">
+                            {saldoDisp} {saldoDisp === 1 ? 'día' : 'días'}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 9. Fecha Solicitud */}
+                      <td className="py-2.5 px-3 text-gray-600 font-normal text-[13px] whitespace-nowrap">
+                        {item.fechaSolicitud || '20/Sep/2026'}
+                      </td>
+
+                      {/* 10. Comentarios */}
+                      <td className="py-2.5 px-3 text-[13px] whitespace-nowrap">
+                        {item.comentarios && item.comentarios.trim().length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveComment(item.comentarios || null);
+                              setActiveCommentAuthor(`${item.colaborador} (${item.folio || item.id})`);
+                            }}
+                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-normal cursor-pointer transition-colors text-[13px]"
+                            title="Ver justificación o comentario del colaborador"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Ver</span>
+                          </button>
+                        ) : item.motivoExcepcion ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveComment(item.motivoExcepcion || null);
+                              setActiveCommentAuthor(`${item.colaborador} (${item.folio || item.id})`);
+                            }}
+                            className="inline-flex items-center gap-1 text-amber-700 hover:text-amber-900 hover:underline font-normal cursor-pointer transition-colors text-[13px]"
+                            title="Ver motivo de excepción"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            <span>Ver</span>
+                          </button>
+                        ) : (
+                          <span className="text-gray-400 font-normal">N/A</span>
+                        )}
+                      </td>
+
+                      {/* 11. Jefe Directo */}
+                      <td className="py-2.5 px-3 text-gray-600 text-[13px] whitespace-nowrap font-normal">
+                        {item.jefeDirecto || 'Emmanuel Muñoz'}
+                      </td>
+
+                      {/* 12. Estatus */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        {item.estatus === 'Pendiente' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />
+                            Pendiente
+                          </span>
+                        )}
+                        {item.estatus === 'Aprobada' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
+                            Aprobada
+                          </span>
+                        )}
+                        {item.estatus === 'Rechazada' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-50 text-red-800 border border-red-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5" />
+                            Rechazada
+                          </span>
+                        )}
+                        {item.estatus === 'Expirado por Sistema' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1.5" />
+                            Expirado
+                          </span>
+                        )}
+                        {item.estatus === 'Cancelada' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mr-1.5" />
+                            Cancelada
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -757,6 +876,80 @@ export const TyCReportsView: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {/* Modal de Vista Detallada de Solicitud (Master-Detail Modo Auditoría) */}
+      <RequestDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedRequestForModal(null);
+        }}
+        request={selectedRequestForModal}
+        isReadOnly={true}
+      />
+
+      {/* ========================================================
+          MODAL: Ver Comentarios / Justificación en TyC
+          ======================================================== */}
+      {activeComment && (
+        <div
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn"
+          onClick={() => setActiveComment(null)}
+        >
+          <div
+            className="bg-white border border-gray-200 rounded-lg max-w-md w-full p-5 shadow-lg animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Encabezado del modal */}
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center shrink-0">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900">
+                    Comentario de la Solicitud
+                  </h4>
+                  {activeCommentAuthor && (
+                    <p className="text-xs text-gray-500 font-medium">
+                      {activeCommentAuthor}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveComment(null)}
+                className="text-gray-400 hover:text-gray-600 cursor-pointer p-1 rounded hover:bg-gray-100 transition-colors"
+                title="Cerrar modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Contenido / Cuerpo del comentario */}
+            <div className="py-4">
+              <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Justificación / Nota Institucional:
+              </label>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3.5 text-xs text-gray-800 leading-relaxed font-normal whitespace-pre-wrap">
+                "{activeComment}"
+              </div>
+            </div>
+
+            {/* Pie del modal con botón Cerrar */}
+            <div className="pt-3 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setActiveComment(null)}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

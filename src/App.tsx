@@ -24,7 +24,8 @@ import MinimalAlertModal, { AlertModalState } from './MinimalAlertModal';
 
 interface Solicitud {
   id: string;
-  tipo: 'Vacaciones' | 'Día Flex';
+  folio?: string;
+  tipo: 'Vacaciones' | 'Día Flex' | 'Home week';
   fechas: string;
   fechaInicio: string;
   fechaFin: string;
@@ -33,6 +34,8 @@ interface Solicitud {
   esExcepcion?: boolean;
   motivo?: string;
   fechaRegistro: string;
+  escalarAGerencia?: boolean;
+  destinatarioAprobacion?: string;
 }
 
 export default function App() {
@@ -79,7 +82,8 @@ export default function App() {
   // Historial de solicitudes (con los datos requeridos por la especificación)
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([
     {
-      id: 'SOL-2026-005',
+      id: 'FOL-2026-005',
+      folio: 'FOL-2026-005',
       tipo: 'Vacaciones',
       fechas: '16/Nov - 20/Nov',
       fechaInicio: '2026-11-16',
@@ -90,7 +94,8 @@ export default function App() {
       fechaRegistro: '18/Sep/2026',
     },
     {
-      id: 'SOL-2026-004',
+      id: 'FOL-2026-004',
+      folio: 'FOL-2026-004',
       tipo: 'Vacaciones',
       fechas: '10/Oct - 15/Oct',
       fechaInicio: '2026-10-10',
@@ -101,7 +106,8 @@ export default function App() {
       fechaRegistro: '20/Sep/2026',
     },
     {
-      id: 'SOL-2026-003',
+      id: 'FOL-2026-003',
+      folio: 'FOL-2026-003',
       tipo: 'Día Flex',
       fechas: '20/Sep',
       fechaInicio: '2026-09-20',
@@ -112,7 +118,8 @@ export default function App() {
       fechaRegistro: '12/Sep/2026',
     },
     {
-      id: 'SOL-2026-002',
+      id: 'FOL-2026-002',
+      folio: 'FOL-2026-002',
       tipo: 'Vacaciones',
       fechas: '15/Jul - 19/Jul',
       fechaInicio: '2026-07-15',
@@ -123,7 +130,8 @@ export default function App() {
       fechaRegistro: '01/Jul/2026',
     },
     {
-      id: 'SOL-2026-001',
+      id: 'FOL-2026-001',
+      folio: 'FOL-2026-001',
       tipo: 'Día Flex',
       fechas: '14/Feb',
       fechaInicio: '2026-02-14',
@@ -164,6 +172,18 @@ export default function App() {
     )
     .reduce((acc, curr) => acc + curr.dias, 0);
   const saldoFlexCalculado = Math.max(0, diasFlexAsignados - diasFlexUsados);
+
+  // Saldo de Home week (1 semana por semestre, no acumulable)
+  const [saldoHomeWeekAsignado] = useState(1);
+  const homeWeekUsados = solicitudes
+    .filter(
+      (s) =>
+        s.tipo === 'Home week' &&
+        (s.estatus === 'Aprobado' ||
+          s.estatus === 'Pendiente de Aprobación (Jefe)' ||
+          s.estatus === 'Pendiente de Cancelación (Jefe)')
+    ).length;
+  const saldoHomeWeekCalculado = Math.max(0, saldoHomeWeekAsignado - homeWeekUsados);
 
   // Estado de modales y alertas minimalistas
   const [alertModal, setAlertModal] = useState<AlertModalState>({
@@ -610,8 +630,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Tarjetas de Saldo (2) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Tarjetas de Saldo (3) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Tarjeta 1: Saldo de Vacaciones */}
             <div className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col justify-between">
               <div>
@@ -728,6 +748,42 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Tarjeta 3: Saldo de Home week */}
+            <div className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Saldo de Home week
+                  </h3>
+                  <button
+                    type="button"
+                    className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 p-1 rounded transition-colors cursor-help"
+                    title="La frecuencia del beneficio es de 1 semana por Semestre (semanas separadas) no son acumulables."
+                    aria-label="Información sobre beneficio Home week"
+                  >
+                    <Info className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-gray-900 tabular-nums">
+                    {saldoHomeWeekCalculado}
+                  </span>
+                  <span className="text-base font-medium text-gray-600">
+                    {saldoHomeWeekCalculado === 1 ? 'semana disponible' : 'semanas disponibles'}
+                  </span>
+                </div>
+
+                {/* Contenedor ajustado al texto */}
+                <div className="mt-4 w-fit bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 flex items-center">
+                  <span className="text-xs text-gray-600 inline-flex items-center gap-1">
+                    <span>Vence el:</span>
+                    <span className="font-mono font-medium text-gray-800">31/Dic/2026</span>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -740,8 +796,10 @@ export default function App() {
             <NewRequestForm
               saldoVacacionesCalculado={saldoVacacionesCalculado}
               saldoFlexCalculado={saldoFlexCalculado}
+              saldoHomeWeekCalculado={saldoHomeWeekCalculado}
               solicitudesExistentes={solicitudes}
               jefeDirecto={colaborador.jefeDirecto}
+              puestoJefe={colaborador.puestoJefe}
               onSolicitudCreada={(nuevaSol) => {
                 setSolicitudes([nuevaSol, ...solicitudes]);
               }}
@@ -833,9 +891,17 @@ export default function App() {
                                   Excepción
                                 </span>
                               )}
+                              {sol.escalarAGerencia && (
+                                <span
+                                  className="text-[9px] bg-purple-50 text-purple-700 border border-purple-200 px-1 py-0.2 rounded font-mono"
+                                  title={`Escalada a ${sol.destinatarioAprobacion || 'Gerencia'}`}
+                                >
+                                  Escalada
+                                </span>
+                              )}
                             </div>
-                            <span className="text-[10px] text-gray-400 block font-mono">
-                              {sol.id}
+                            <span className="text-xs text-gray-400 font-mono block">
+                              Folio: {sol.folio || sol.id}
                             </span>
                           </td>
 

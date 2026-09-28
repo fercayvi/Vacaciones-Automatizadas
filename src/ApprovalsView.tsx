@@ -22,9 +22,11 @@ import {
   ShieldCheck,
   MessageSquare,
   Key,
-  Info
+  Info,
+  Eye
 } from 'lucide-react';
 import MinimalAlertModal, { AlertModalState } from './MinimalAlertModal';
+import RequestDetailsModal from './RequestDetailsModal';
 
 export interface CurrentUser {
   id: string;
@@ -42,13 +44,15 @@ export const CURRENT_USER_DEFAULT: CurrentUser = {
 
 export interface SolicitudSubordinado {
   id: string;
+  folio: string;
   colaboradorId: string; // Identificador del empleado (ej. EMP-05120)
   employeeId?: string; // Alias compatible
   colaboradorNombre: string;
-  colaboradorPuesto: string;
+  colaboradorPuesto?: string;
   colaboradorDepto: string;
+  departamento: string;
   colaboradorEmail: string;
-  tipo: 'Vacaciones' | 'Día Flex';
+  tipo: 'Vacaciones' | 'Día Flex' | 'Home week';
   fechas: string;
   fechaInicio: string;
   fechaFin: string;
@@ -103,12 +107,13 @@ const MESES_ESPANOL = [
 // =========================================================================
 export const MOCK_REQUESTS: SolicitudSubordinado[] = [
   {
-    id: 'SOL-2026-008',
+    id: 'FOL-2026-008',
+    folio: 'FOL-2026-008',
     colaboradorId: 'EMP-05309',
     employeeId: 'EMP-05309',
     colaboradorNombre: 'Alejandro Morales Cruz',
-    colaboradorPuesto: 'Desarrollador Backend Cloud',
     colaboradorDepto: 'Ingeniería y TI',
+    departamento: 'Ingeniería y TI',
     colaboradorEmail: 'amorales@ayvi.com.mx',
     tipo: 'Vacaciones',
     fechas: '09/Oct - 15/Oct/2026',
@@ -124,12 +129,13 @@ export const MOCK_REQUESTS: SolicitudSubordinado[] = [
     avatarColor: 'bg-blue-600',
   },
   {
-    id: 'SOL-2026-005',
+    id: 'FOL-2026-005',
+    folio: 'FOL-2026-005',
     colaboradorId: 'EMP-05120',
     employeeId: 'EMP-05120',
     colaboradorNombre: 'Sofía Valenzuela Mendoza',
-    colaboradorPuesto: 'Diseñadora de Producto UI/UX',
     colaboradorDepto: 'Diseño e Innovación',
+    departamento: 'Diseño e Innovación',
     colaboradorEmail: 'svalenzuela@ayvi.com.mx',
     tipo: 'Día Flex',
     fechas: '28/Sep/2026',
@@ -145,12 +151,13 @@ export const MOCK_REQUESTS: SolicitudSubordinado[] = [
     avatarColor: 'bg-emerald-600',
   },
   {
-    id: 'SOL-2026-006',
+    id: 'FOL-2026-006',
+    folio: 'FOL-2026-006',
     colaboradorId: 'EMP-05234',
     employeeId: 'EMP-05234',
     colaboradorNombre: 'Carlos Alberto Méndez',
-    colaboradorPuesto: 'Ingeniero de Datos & Cloud',
     colaboradorDepto: 'Arquitectura de Datos',
+    departamento: 'Arquitectura de Datos',
     colaboradorEmail: 'cmendez@ayvi.com.mx',
     tipo: 'Vacaciones',
     fechas: '03/Nov - 07/Nov/2026',
@@ -166,12 +173,13 @@ export const MOCK_REQUESTS: SolicitudSubordinado[] = [
     avatarColor: 'bg-purple-600',
   },
   {
-    id: 'SOL-2026-007',
+    id: 'FOL-2026-007',
+    folio: 'FOL-2026-007',
     colaboradorId: 'EMP-04981',
     employeeId: 'EMP-04981',
     colaboradorNombre: 'Mariana Rivas Pacheco',
-    colaboradorPuesto: 'Especialista de QA & Testing',
     colaboradorDepto: 'Calidad de Software',
+    departamento: 'Calidad de Software',
     colaboradorEmail: 'mrivas@ayvi.com.mx',
     tipo: 'Vacaciones',
     fechas: '18/Oct - 21/Oct/2026',
@@ -189,12 +197,13 @@ export const MOCK_REQUESTS: SolicitudSubordinado[] = [
   },
   // Solicitud pasada no aprobada a tiempo: su fecha de inicio ya pasó, por lo que auto-expira
   {
-    id: 'SOL-2026-003',
+    id: 'FOL-2026-003',
+    folio: 'FOL-2026-003',
     colaboradorId: 'EMP-05411',
     employeeId: 'EMP-05411',
     colaboradorNombre: 'Raúl Domínguez Soto',
-    colaboradorPuesto: 'Desarrollador Mobile iOS',
     colaboradorDepto: 'Ingeniería y TI',
+    departamento: 'Ingeniería y TI',
     colaboradorEmail: 'rdominguez@ayvi.com.mx',
     tipo: 'Vacaciones',
     fechas: '10/Sep - 15/Sep/2026',
@@ -211,12 +220,13 @@ export const MOCK_REQUESTS: SolicitudSubordinado[] = [
   },
   // Historial previo resuelto de miembros del equipo
   {
-    id: 'SOL-2026-002',
+    id: 'FOL-2026-002',
+    folio: 'FOL-2026-002',
     colaboradorId: 'EMP-05120',
     employeeId: 'EMP-05120',
     colaboradorNombre: 'Sofía Valenzuela Mendoza',
-    colaboradorPuesto: 'Diseñadora de Producto UI/UX',
     colaboradorDepto: 'Diseño e Innovación',
+    departamento: 'Diseño e Innovación',
     colaboradorEmail: 'svalenzuela@ayvi.com.mx',
     tipo: 'Vacaciones',
     fechas: '14/Ago - 15/Ago/2026',
@@ -231,12 +241,13 @@ export const MOCK_REQUESTS: SolicitudSubordinado[] = [
     avatarColor: 'bg-emerald-600',
   },
   {
-    id: 'SOL-2026-001',
+    id: 'FOL-2026-001',
+    folio: 'FOL-2026-001',
     colaboradorId: 'EMP-05234',
     employeeId: 'EMP-05234',
     colaboradorNombre: 'Carlos Alberto Méndez',
-    colaboradorPuesto: 'Ingeniero de Datos & Cloud',
     colaboradorDepto: 'Arquitectura de Datos',
+    departamento: 'Arquitectura de Datos',
     colaboradorEmail: 'cmendez@ayvi.com.mx',
     tipo: 'Día Flex',
     fechas: '01/Ago/2026',
@@ -252,12 +263,13 @@ export const MOCK_REQUESTS: SolicitudSubordinado[] = [
     avatarColor: 'bg-purple-600',
   },
   {
-    id: 'SOL-2026-009',
+    id: 'FOL-2026-009',
+    folio: 'FOL-2026-009',
     colaboradorId: 'EMP-05120',
     employeeId: 'EMP-05120',
     colaboradorNombre: 'Sofía Valenzuela Mendoza',
-    colaboradorPuesto: 'Diseñadora de Producto UI/UX',
     colaboradorDepto: 'Diseño e Innovación',
+    departamento: 'Diseño e Innovación',
     colaboradorEmail: 'svalenzuela@ayvi.com.mx',
     tipo: 'Vacaciones',
     fechas: '12/Nov - 16/Nov/2026',
@@ -296,7 +308,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
 
   // Filtros
   const [tabActual, setTabActual] = useState<'pendientes' | 'cancelaciones' | 'historial'>('pendientes');
-  const [filtroTipo, setFiltroTipo] = useState<'todos' | 'Vacaciones' | 'Día Flex'>('todos');
+  const [filtroTipo, setFiltroTipo] = useState<'todos' | 'Vacaciones' | 'Día Flex' | 'Home week'>('todos');
   const [busqueda, setBusqueda] = useState('');
 
   // Estado para el modal de comentarios
@@ -313,6 +325,15 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
     requestId: null,
     reason: '',
   });
+
+  // Estado para el modal de vista detallada (Master-Detail)
+  const [selectedRequestForModal, setSelectedRequestForModal] = useState<SolicitudSubordinado | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  const handleOpenDetails = (sol: SolicitudSubordinado) => {
+    setSelectedRequestForModal(sol);
+    setIsDetailsModalOpen(true);
+  };
 
   // Estado para Pases de Excepción (Habilitar Modo Excepción por 24h)
   const [activeTokens, setActiveTokens] = useState<string[]>(['Mariana Rivas']);
@@ -626,7 +647,8 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
       s.id.toLowerCase().includes(busq) ||
       s.colaboradorId.toLowerCase().includes(busq) ||
       (s.employeeId && s.employeeId.toLowerCase().includes(busq)) ||
-      s.colaboradorPuesto.toLowerCase().includes(busq);
+      (s.colaboradorPuesto && s.colaboradorPuesto.toLowerCase().includes(busq)) ||
+      (s.departamento && s.departamento.toLowerCase().includes(busq));
     return cumpleTipo && cumpleBusqueda;
   });
 
@@ -793,6 +815,16 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
               >
                 Día Flex
               </button>
+              <button
+                onClick={() => setFiltroTipo('Home week')}
+                className={`px-2 py-1 rounded text-xs transition-colors cursor-pointer ${
+                  filtroTipo === 'Home week'
+                    ? 'bg-white font-semibold text-gray-900 shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Home week
+              </button>
             </div>
           </div>
         </div>
@@ -820,117 +852,126 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           {/* VISTA DESKTOP: Tabla Corporativa Limpia (Visible en pantallas medianas y grandes) */}
           <div className="hidden md:block bg-white border border-gray-200 rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs table-auto">
+              <table className="w-full text-left border-collapse text-[13px] table-auto">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50 text-gray-600 font-semibold uppercase tracking-wider text-[11px]">
-                    <th className="py-2.5 px-2.5">Colaborador / Puesto</th>
-                    <th className="py-2.5 px-2">Tipo</th>
-                    <th className="py-2.5 px-2">Rango de Fechas</th>
-                    <th className="py-2.5 px-2">Días</th>
-                    <th className="py-2.5 px-2">Saldo Disp.</th>
-                    <th className="py-2.5 px-2">Fecha Sol.</th>
-                    <th className="py-2.5 px-2">Comentarios</th>
-                    <th className="py-2.5 px-2">Estatus</th>
-                    <th className="py-2.5 px-2 text-right">Acciones</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Acciones</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Folio</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Colaborador</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Nómina</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Departamento</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Tipo</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Rango de Fechas</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Días</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Saldo Disp.</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Fecha Sol.</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Comentarios</th>
+                    <th className="py-2.5 px-2.5 whitespace-nowrap">Estatus</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {solicitudesFiltradas.map((sol) => {
                     const esDeficit = sol.dias > sol.saldoDisponible;
+                    const esExcepcion = Boolean(sol.esExcepcion || esDeficit);
 
                     return (
                         <tr
                           key={sol.id}
                           className={`transition-colors ${
-                            esDeficit
-                              ? 'bg-red-50/80 hover:bg-red-100/60 border-l-4 border-l-red-500'
+                            esExcepcion
+                              ? 'bg-red-100 hover:bg-red-200/80 border-l-4 border-red-500'
                               : 'hover:bg-gray-50/75'
                           }`}
                         >
-                          {/* Colaborador */}
-                          <td
-                            className={`py-2.5 px-2.5 ${
-                              esDeficit ? 'border-l-4 border-l-red-500' : ''
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-bold text-[10px] shrink-0 border border-gray-300">
-                                {sol.colaboradorNombre
-                                  .split(' ')
-                                  .map((n) => n[0])
-                                  .slice(0, 2)
-                                  .join('')}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="font-semibold text-gray-900 flex flex-wrap items-center gap-1">
-                                  <span>{sol.colaboradorNombre}</span>
-                                  <span className="text-[9px] text-gray-500 font-mono font-normal bg-gray-100 px-1 py-0.2 rounded border border-gray-200">
-                                    {sol.colaboradorId}
-                                  </span>
-                                </div>
-                                <div className="text-[11px] text-gray-500">
-                                  {sol.colaboradorPuesto}
-                                </div>
-                              </div>
-                            </div>
+                          {/* 1. Acciones (Primera Columna) */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDetails(sol)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 active:bg-gray-100 rounded-md transition-colors cursor-pointer shadow-xs"
+                              title="Revisar solicitud y gestionar aprobación"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-gray-500" />
+                              <span>Revisar</span>
+                            </button>
                           </td>
 
-                          {/* Tipo */}
-                          <td className="py-2.5 px-2">
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className="font-medium text-gray-900">{sol.tipo}</span>
+                          {/* 2. Folio */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
+                            <span className="font-mono text-gray-600 font-normal text-[13px]">
+                              {sol.folio || sol.id}
+                            </span>
+                          </td>
+
+                          {/* 3. Colaborador */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
+                            <span className="font-medium text-gray-800 text-[13px] leading-tight">
+                              {sol.colaboradorNombre}
+                            </span>
+                          </td>
+
+                          {/* 4. Nómina */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
+                            <span className="font-mono text-gray-600 font-normal text-[13px] bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                              {sol.colaboradorId || sol.employeeId}
+                            </span>
+                          </td>
+
+                          {/* 5. Departamento */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap text-[13px] text-gray-600 font-normal">
+                            {sol.departamento || sol.colaboradorDepto}
+                          </td>
+
+                          {/* 6. Tipo */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-gray-700 font-normal text-[13px]">{sol.tipo}</span>
                               {sol.esExcepcion && (
                                 <span
-                                  className="text-[9px] bg-red-50 text-red-700 border border-red-200 px-1 py-0.2 rounded font-mono font-medium"
+                                  className="text-[10px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.2 rounded font-mono font-medium"
                                   title="Solicitud por excepción / Saldo en 0"
                                 >
                                   Excepción
                                 </span>
                               )}
                             </div>
-                            <span className="text-[9px] text-gray-400 font-mono block">
-                              {sol.id}
-                            </span>
                           </td>
 
-                          {/* Fechas */}
-                          <td className="py-2.5 px-2 font-mono text-gray-800 text-[11px] leading-tight">
+                          {/* 7. Fechas */}
+                          <td className="py-2.5 px-2.5 font-mono text-gray-600 font-normal text-[13px] leading-tight whitespace-nowrap">
                             {sol.fechas}
                           </td>
 
-                          {/* Total de Días */}
-                          <td className="py-2.5 px-2 tabular-nums">
-                            <span className="inline-block bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded border border-gray-200 text-[11px] font-semibold whitespace-nowrap">
+                          {/* 8. Total de Días */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap tabular-nums">
+                            <span className="text-gray-700 font-normal text-[13px]">
                               {sol.dias} {sol.dias === 1 ? 'día' : 'días'}
                             </span>
                           </td>
 
-                          {/* Saldo Disponible con Alerta Visual si dias > saldoDisponible */}
-                          <td className="py-2.5 px-2 tabular-nums">
+                          {/* 9. Saldo Disponible con Alerta Visual limpia sin etiqueta Déficit */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap tabular-nums">
                             {esDeficit ? (
-                              <div className="flex items-center gap-1">
-                                <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                                <span className="text-red-600 font-bold text-[11px] whitespace-nowrap">
-                                  {sol.saldoDisponible} {sol.saldoDisponible === 1 ? 'd' : 'días'}
-                                </span>
-                                <span className="text-[9px] bg-red-100 text-red-800 px-1 py-0.2 rounded font-semibold border border-red-200">
-                                  Déficit
+                              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                                <span className="text-red-600 font-medium text-[13px] whitespace-nowrap">
+                                  {sol.saldoDisponible} {sol.saldoDisponible === 1 ? 'día' : 'días'}
                                 </span>
                               </div>
                             ) : (
-                              <span className="font-medium text-gray-700 text-[11px] whitespace-nowrap">
+                              <span className="text-gray-600 font-normal text-[13px] whitespace-nowrap">
                                 {sol.saldoDisponible} {sol.saldoDisponible === 1 ? 'día' : 'días'}
                               </span>
                             )}
                           </td>
 
-                          {/* Fecha en que se hizo la solicitud */}
-                          <td className="py-2.5 px-2 text-gray-500 text-[11px]">
+                          {/* 10. Fecha en que se hizo la solicitud */}
+                          <td className="py-2.5 px-2.5 text-gray-600 font-normal text-[13px] whitespace-nowrap">
                             {sol.fechaSolicitud}
                           </td>
 
-                          {/* Comentarios */}
-                          <td className="py-2.5 px-2 text-xs">
+                          {/* 11. Comentarios */}
+                          <td className="py-2.5 px-2.5 text-[13px] whitespace-nowrap">
                             {sol.comentarios && sol.comentarios.trim().length > 0 ? (
                               <button
                                 type="button"
@@ -938,119 +979,54 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                                   setActiveComment(sol.comentarios || null);
                                   setActiveCommentAuthor(`${sol.colaboradorNombre} (${sol.id})`);
                                 }}
-                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer transition-colors text-[11px]"
+                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-normal cursor-pointer transition-colors text-[13px]"
                                 title="Ver justificación o comentario del colaborador"
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
                                 <span>Ver</span>
                               </button>
                             ) : (
-                              <span className="text-gray-400 text-xs font-normal">N/A</span>
+                              <span className="text-gray-400 font-normal">N/A</span>
                             )}
                           </td>
 
-                          {/* Estatus */}
-                          <td className="py-2.5 px-2">
+                          {/* 12. Estatus */}
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
                             {sol.estatus === 'Pendiente' && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span>
                                 Pendiente
                               </span>
                             )}
                             {sol.estatus === 'Pendiente de Cancelación (Jefe)' && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mr-1 animate-pulse"></span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mr-1.5 animate-pulse"></span>
                                 Cancelación
                               </span>
                             )}
                             {sol.estatus === 'Aprobada' && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1"></span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
                                 Aprobada
                               </span>
                             )}
                             {(sol.estatus === 'Cancelada' || sol.estatus === 'Cancelado') && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap">
-                                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mr-1"></span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-500 mr-1.5"></span>
                                 Cancelada
                               </span>
                             )}
                             {sol.estatus === 'Rechazada' && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-800 border border-red-200 whitespace-nowrap">
-                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1"></span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-50 text-red-800 border border-red-200 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5"></span>
                                 Rechazada
                               </span>
                             )}
                             {sol.estatus === 'Expirado por Sistema' && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-300 whitespace-nowrap">
-                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1"></span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700 border border-gray-300 whitespace-nowrap">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1.5"></span>
                                 Expirado
                               </span>
-                            )}
-                          </td>
-
-                          {/* Acciones Requeridas */}
-                          <td className="py-2.5 px-2 text-right">
-                            {sol.estatus === 'Pendiente' && (
-                              <div className="inline-flex items-center gap-1.5 justify-end">
-                                {/* Botón Aprobar: Verde */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleAprobar(sol)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-none transition-colors cursor-pointer"
-                                  title="Aprobar solicitud y descontar del saldo visible"
-                                >
-                                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                                  <span>Aprobar</span>
-                                </button>
-
-                                {/* Botón Rechazar: Rojo */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleAbrirRechazo(sol)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded text-red-700 bg-white border border-red-300 hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
-                                  title="Rechazar solicitud con motivo opcional"
-                                >
-                                  <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                                  <span>Rechazar</span>
-                                </button>
-                              </div>
-                            )}
-
-                            {sol.estatus === 'Pendiente de Cancelación (Jefe)' && (
-                              <div className="inline-flex items-center gap-1.5 justify-end">
-                                {/* Botón Aprobar Cancelación */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleAprobarCancelacion(sol)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-none transition-colors cursor-pointer"
-                                  title="Aprobar cancelación y reembolsar los días al saldo visible"
-                                >
-                                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                                  <span>Aprobar</span>
-                                </button>
-
-                                {/* Botón Rechazar Cancelación */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRechazarCancelacion(sol)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded text-red-700 bg-white border border-red-300 hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
-                                  title="Rechazar cancelación y mantener los días descontados"
-                                >
-                                  <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                                  <span>Rechazar</span>
-                                </button>
-                              </div>
-                            )}
-
-                            {sol.estatus !== 'Pendiente' && sol.estatus !== 'Pendiente de Cancelación (Jefe)' && (
-                              <div className="text-[11px] text-gray-500 text-right">
-                                <span>
-                                  {sol.estatus === 'Expirado por Sistema'
-                                    ? 'Expirado por Sistema'
-                                    : `Resuelto: ${sol.fechaResolucion || 'Procesado'}`}
-                                </span>
-                              </div>
                             )}
                           </td>
                         </tr>
@@ -1098,7 +1074,7 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
                           </span>
                         </h4>
                         <p className="text-[11px] text-gray-500">
-                          {sol.colaboradorPuesto}
+                          {sol.departamento || sol.colaboradorDepto}
                         </p>
                       </div>
                     </div>
@@ -1640,6 +1616,33 @@ export const ApprovalsView: React.FC<ApprovalsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Vista Detallada de Solicitud (Master-Detail) */}
+      <RequestDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedRequestForModal(null);
+        }}
+        request={selectedRequestForModal}
+        isReadOnly={false}
+        onApprove={(req) => {
+          const original = solicitudes.find((s) => s.id === req.id) || (req as unknown as SolicitudSubordinado);
+          handleAprobar(original);
+        }}
+        onReject={(req) => {
+          const original = solicitudes.find((s) => s.id === req.id) || (req as unknown as SolicitudSubordinado);
+          handleAbrirRechazo(original);
+        }}
+        onApproveCancelacion={(req) => {
+          const original = solicitudes.find((s) => s.id === req.id) || (req as unknown as SolicitudSubordinado);
+          handleAprobarCancelacion(original);
+        }}
+        onRejectCancelacion={(req) => {
+          const original = solicitudes.find((s) => s.id === req.id) || (req as unknown as SolicitudSubordinado);
+          handleRechazarCancelacion(original);
+        }}
+      />
 
       {/* Modal de Alerta Minimalista Unificado */}
       <MinimalAlertModal
