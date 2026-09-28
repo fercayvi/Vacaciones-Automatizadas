@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import ApprovalsView from './ApprovalsView';
 import NewRequestForm from './NewRequestForm';
+import TyCReportsView from './TyCReportsView';
 import MinimalAlertModal, { AlertModalState } from './MinimalAlertModal';
 
 interface Solicitud {
@@ -38,8 +39,8 @@ export default function App() {
   // Manejo de Vistas (VISTA 1: Login, VISTA 2: Dashboard)
   const [vistaActual, setVistaActual] = useState<'login' | 'dashboard'>('login');
 
-  // Pestaña Activa en el Dashboard: 'mis-solicitudes' (Colaborador) | 'aprobaciones' (Jefe Directo)
-  const [pestanaActiva, setPestanaActiva] = useState<'mis-solicitudes' | 'aprobaciones'>('mis-solicitudes');
+  // Pestaña Activa en el Dashboard: 'mis-solicitudes' (Colaborador) | 'aprobaciones' (Jefe Directo) | 'reportes-tyc' (Auditoría TyC)
+  const [pestanaActiva, setPestanaActiva] = useState<'mis-solicitudes' | 'aprobaciones' | 'reportes-tyc'>('mis-solicitudes');
   const [conteoPendientesJefe, setConteoPendientesJefe] = useState(4);
 
   // Estado del Formulario de Login
@@ -457,7 +458,7 @@ export default function App() {
               </button>
             </div>
 
-            {/* Enlaces de navegación con pestañas Colaborador / Jefe Directo */}
+            {/* Enlaces de navegación con pestañas Colaborador / Jefe Directo / Auditoría TyC */}
             <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
               <button
                 type="button"
@@ -484,6 +485,18 @@ export default function App() {
                 <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
                   {conteoPendientesJefe}
                 </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPestanaActiva('reportes-tyc')}
+                className={`py-5 transition-colors cursor-pointer flex items-center gap-2 ${
+                  pestanaActiva === 'reportes-tyc'
+                    ? 'text-purple-700 border-b-2 border-purple-700 font-semibold'
+                    : 'text-gray-600 hover:text-gray-900 border-b-2 border-transparent'
+                }`}
+              >
+                <span>Auditoría TyC</span>
               </button>
             </nav>
           </div>
@@ -521,6 +534,17 @@ export default function App() {
             >
               {conteoPendientesJefe}
             </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPestanaActiva('reportes-tyc')}
+            className={`flex-1 py-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+              pestanaActiva === 'reportes-tyc'
+                ? 'bg-purple-700 text-white shadow-xs'
+                : 'bg-white text-gray-700 border border-gray-200'
+            }`}
+          >
+            <span>Auditoría TyC</span>
           </button>
         </div>
       </header>
@@ -923,7 +947,7 @@ export default function App() {
           </section>
         </div>
       </>
-    ) : (
+    ) : pestanaActiva === 'aprobaciones' ? (
       <ApprovalsView
         currentUser={{
           id: colaborador.numEmpleado,
@@ -933,6 +957,8 @@ export default function App() {
         }}
         onPendingCountChange={(cant) => setConteoPendientesJefe(cant)}
       />
+    ) : (
+      <TyCReportsView />
     )}
   </main>
 
