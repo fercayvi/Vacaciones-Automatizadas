@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Info, AlertCircle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ShieldAlert } from 'lucide-react';
 import MinimalAlertModal, { AlertModalState } from './MinimalAlertModal';
 
 export interface Solicitud {
@@ -101,6 +101,60 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({
     const d2 = new Date(fin + 'T00:00:00');
     const txt2 = `${d2.getDate()}/${meses[d2.getMonth()]}`;
     return `${txt1} - ${txt2}`;
+  };
+
+  // ========================================================
+  // MOTOR DE VALIDACIÓN: SALDO COMPROMETIDO Y SALDO EFECTIVO
+  // (Prevención de Doble Gasto ante Solicitudes Pendientes)
+  // ========================================================
+  const validarSaldoEfectivo = (
+    tipo: 'Vacaciones' | 'Día Flex' | 'Home week',
+    diasSolicitados: number
+  ) => {
+    // 1. Consulta al historial del colaborador para sumar días con estatus "Pendiente"
+    const solicitudesPendientes = solicitudesExistentes.filter((s) => {
+      if (s.tipo !== tipo) return false;
+      const estatus = (s.estatus || '').toLowerCase();
+      return estatus.includes('pendiente') && !estatus.includes('cancelac');
+    });
+
+    const diasComprometidos = solicitudesPendientes.reduce((acc, s) => acc + (s.dias || 0), 0);
+
+    // 2. Saldo total base según el tipo de solicitud
+    const saldoTotalBase =
+      tipo === 'Vacaciones'
+        ? saldoVacacionesCalculado
+        : tipo === 'Día Flex'
+        ? saldoFlexCalculado
+        : (saldoHomeWeekCalculado ?? 1) * 5;
+
+    // 3. Saldo efectivo = Saldo total disponible - Días comprometidos
+    const saldoEfectivo = saldoTotalBase - diasComprometidos;
+
+    // 4. Evaluar si los días solicitados son menores o iguales al saldoEfectivo
+    const esSuficiente = diasSolicitados <= saldoEfectivo;
+
+    let mensajeError = '';
+    if (!esSuficiente) {
+      if (diasComprometidos > 0) {
+        mensajeError = `Saldo insuficiente. Tienes ${diasComprometidos} días comprometidos en solicitudes pendientes de aprobación por tu jefatura. Tu saldo efectivo es de ${saldoEfectivo} días.`;
+      } else {
+        mensajeError =
+          tipo === 'Vacaciones'
+            ? 'No cuentas con los días de vacaciones suficientes para cubrir esta solicitud.'
+            : tipo === 'Día Flex'
+            ? 'No cuentas con días Flex disponibles para cubrir esta solicitud.'
+            : 'Ya has utilizado o tienes en trámite tu beneficio de Home week correspondiente a este semestre.';
+      }
+    }
+
+    return {
+      esValido: esSuficiente,
+      diasComprometidos,
+      saldoTotalBase,
+      saldoEfectivo,
+      mensajeError,
+    };
   };
 
   // Cambio dinámico de tipo con ajustes automáticos
@@ -247,79 +301,104 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({
       return;
     }
 
-    // Validaciones en modo normal vs modo excepción
-    if (!isExceptionMode) {
-      // Regla 1: Validar anticipación de 7 días (Aplica para Vacaciones, Día Flex y Home week)
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      const inicioDate = new Date(fechaInicio + 'T00:00:00');
-      const diffTime = inicioDate.getTime() - hoy.getTime();
-      const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    // Regla 1: Validar anticipación de 7 días
+    // Excepción de Anticipación (Aplica para todos): Si el Modo Excepción está activo, se permite crear solicitudes con menos de 7 días de anticipación
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const inicioDate = new Date(fechaInicio + 'T00:00:00');
+    const diffTime = inicioDate.getTime() - hoy.getTime();
+    const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      if (diffDias < 7) {
+    if (!isExceptionMode && diffDias < 7) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Anticipación requerida',
+        message: 'Las solicitudes deben realizarse con al menos 7 días de anticipación.',
+        type: 'error',
+      });
+      return;
+    }
+
+    // Regla 2: Reglas inquebrantables de Día Flex (no consecutivos)
+    if (tipoSeleccionado === 'Día Flex') {
+      const tieneConsecutivo = solicitudesExistentes.some((s) => {
+        if (s.tipo !== 'Día Flex' || s.estatus === 'Cancelada (Reversada)') return false;
+        const sDate = new Date(s.fechaInicio + 'T00:00:00');
+        const diff = Math.abs(Math.round((inicioDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)));
+        return diff <= 1;
+      });
+
+      if (tieneConsecutivo) {
         setAlertModal({
           isOpen: true,
-          title: 'Anticipación requerida',
-          message: 'Las solicitudes deben realizarse con al menos 7 días de anticipación.',
+          title: 'Regla de Días Flex',
+          message: 'Los Días Flex son individuales y no pueden tomarse de forma consecutiva.',
           type: 'error',
         });
         return;
       }
+    }
 
-      // Regla 2: Validar saldo suficiente según el tipo de solicitud
-      if (tipoSeleccionado === 'Vacaciones') {
-        if (diasTotal > saldoVacacionesCalculado) {
+    // Regla 3: Validar saldo efectivo (Prevención de Doble Gasto) y alcance del Modo Excepción
+    // - Calcula saldoEfectivo restando las solicitudes pendientes de aprobación
+    // - Excepción de Saldo (Exclusivo para Vacaciones): Si está activo, permite continuar (dejando saldo en negativo).
+    // - Si el usuario intenta pedir Día Flex o Home week sin saldo disponible, se bloquea el envío incluso con Modo Excepción.
+    const validacionSaldo = validarSaldoEfectivo(tipoSeleccionado, diasTotal);
+
+    if (tipoSeleccionado === 'Vacaciones') {
+      if (!isExceptionMode && !validacionSaldo.esValido) {
+        setAlertModal({
+          isOpen: true,
+          title: 'Saldo insuficiente',
+          message: validacionSaldo.mensajeError,
+          type: 'error',
+        });
+        return;
+      }
+    } else if (tipoSeleccionado === 'Día Flex') {
+      if (!validacionSaldo.esValido) {
+        if (isExceptionMode) {
+          setAlertModal({
+            isOpen: true,
+            title: 'Excepción no permitida',
+            message: 'El pase de excepción no es válido para solicitar Días Flex o Home week sin saldo disponible.',
+            type: 'error',
+          });
+          return;
+        } else {
           setAlertModal({
             isOpen: true,
             title: 'Saldo insuficiente',
-            message: 'No cuentas con los días de vacaciones suficientes para cubrir esta solicitud.',
+            message: validacionSaldo.mensajeError,
             type: 'error',
           });
           return;
         }
-      } else if (tipoSeleccionado === 'Día Flex') {
-        if (diasTotal > saldoFlexCalculado) {
+      }
+    } else if (tipoSeleccionado === 'Home week') {
+      if (saldoHomeWeekCalculado <= 0 || !validacionSaldo.esValido) {
+        if (isExceptionMode) {
           setAlertModal({
             isOpen: true,
-            title: 'Saldo insuficiente',
-            message: 'No cuentas con días Flex disponibles para cubrir esta solicitud.',
+            title: 'Excepción no permitida',
+            message: 'El pase de excepción no es válido para solicitar Días Flex o Home week sin saldo disponible.',
             type: 'error',
           });
           return;
-        }
-      } else if (tipoSeleccionado === 'Home week') {
-        if (saldoHomeWeekCalculado <= 0) {
+        } else {
           setAlertModal({
             isOpen: true,
             title: 'Saldo de Home week no disponible',
-            message: 'Ya has utilizado o tienes en trámite tu beneficio de Home week correspondiente a este semestre.',
+            message: validacionSaldo.mensajeError,
             type: 'error',
           });
           return;
         }
       }
+    }
 
-      // Regla 3: No permitir Días Flex consecutivos con otras solicitudes
-      if (tipoSeleccionado === 'Día Flex') {
-        const tieneConsecutivo = solicitudesExistentes.some((s) => {
-          if (s.tipo !== 'Día Flex' || s.estatus === 'Cancelada (Reversada)') return false;
-          const sDate = new Date(s.fechaInicio + 'T00:00:00');
-          const diff = Math.abs(Math.round((inicioDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)));
-          return diff <= 1;
-        });
-
-        if (tieneConsecutivo) {
-          setAlertModal({
-            isOpen: true,
-            title: 'Regla de Días Flex',
-            message: 'Los Días Flex son individuales y no pueden tomarse de forma consecutiva.',
-            type: 'error',
-          });
-          return;
-        }
-      }
-    } else {
-      // Modo Excepción: Justificación obligatoria (mínimo 10 caracteres)
+    // Modo Excepción: Justificación obligatoria (mínimo 10 caracteres)
+    if (isExceptionMode) {
       if (!justification || justification.trim().length < 10) {
         setAlertModal({
           isOpen: true,
@@ -376,6 +455,17 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({
     Boolean(fechaInicio) &&
     Boolean(fechaFin) &&
     !esBloqueLunesViernesValido(fechaInicio, fechaFin);
+
+  // Consulta de saldo efectivo y días comprometidos en tiempo real
+  const diasSolicitadosEnVivo =
+    tipoSeleccionado === 'Día Flex' ? 1 : tipoSeleccionado === 'Home week' ? 5 : diasCalculados;
+  const infoSaldoActual = validarSaldoEfectivo(tipoSeleccionado, diasSolicitadosEnVivo);
+
+  // Validación visual de excepción no permitida para Flex o Home week sin saldo disponible
+  const intentoExcepcionSinSaldoInvalida =
+    isExceptionMode &&
+    ((tipoSeleccionado === 'Día Flex' && !infoSaldoActual.esValido) ||
+      (tipoSeleccionado === 'Home week' && (saldoHomeWeekCalculado <= 0 || !infoSaldoActual.esValido)));
 
   const isSubmitDisabled =
     (isExceptionMode && justification.trim().length < 10) ||
@@ -497,29 +587,45 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({
             </div>
           )}
 
-          {/* Cálculo de días solicitados en vivo */}
+          {/* Cálculo de días solicitados en vivo y desglose de saldo efectivo */}
           {fechaInicio && (
-            <div className="text-xs bg-gray-50 border border-gray-200 rounded p-2 flex items-center justify-between text-gray-700 font-mono">
-              <span>Días laborales a solicitar:</span>
-              <span className="font-bold text-gray-900">
-                {tipoSeleccionado === 'Día Flex'
-                  ? '1 día'
-                  : tipoSeleccionado === 'Home week'
-                  ? '5 días (1 Semana)'
-                  : `${diasCalculados} día(s)`}
-              </span>
+            <div className="space-y-1.5 animate-fadeIn">
+              <div className="text-xs bg-gray-50 border border-gray-200 rounded p-2.5 flex items-center justify-between text-gray-700 font-mono">
+                <span>Días laborales a solicitar:</span>
+                <span className="font-bold text-gray-900">
+                  {tipoSeleccionado === 'Día Flex'
+                    ? '1 día'
+                    : tipoSeleccionado === 'Home week'
+                    ? '5 días (1 Semana)'
+                    : `${diasCalculados} día(s)`}
+                </span>
+              </div>
+
+              {/* Indicador de Saldo Comprometido en Solicitudes Pendientes */}
+              {infoSaldoActual.diasComprometidos > 0 && (
+                <div className="text-[11px] bg-amber-50/80 border border-amber-200 rounded px-2.5 py-1.5 flex items-center justify-between text-amber-900 font-sans">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    <span>Comprometido en solicitudes pendientes:</span>
+                  </span>
+                  <span className="font-mono font-semibold">
+                    {infoSaldoActual.diasComprometidos} día(s) (Saldo efectivo: {infoSaldoActual.saldoEfectivo} días)
+                  </span>
+                </div>
+              )}
+
+              {/* Alerta visual de error en la interfaz cuando supera el saldo efectivo */}
+              {!isExceptionMode && !infoSaldoActual.esValido && (
+                <div className="rounded border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 flex items-start gap-2 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <p className="leading-snug">
+                    {infoSaldoActual.mensajeError}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Nota visual informativa debajo de las fechas */}
-          <div className="rounded border border-blue-100 bg-blue-50/60 p-3 text-xs text-blue-900 flex items-start gap-2">
-            <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-            <p className="leading-relaxed">
-              {tipoSeleccionado === 'Home week'
-                ? 'El beneficio Home week requiere 7 días de anticipación y debe solicitarse en un bloque de 5 días hábiles continuos de Lunes a Viernes (1 semana por semestre).'
-                : 'Las solicitudes requieren 7 días de anticipación. No se permiten días Flex consecutivos.'}
-            </p>
-          </div>
 
           {/* Regla de Negocio: Modo Excepción */}
           <div className="pt-2 border-t border-gray-100">
@@ -537,7 +643,7 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({
                   )}
                 </span>
                 <span className="text-[11px] text-gray-500 font-normal mt-0.5">
-                  Permite omitir reglas de anticipación, límite de días Flex o falta de saldo.
+                  Permite omitir anticipación (todos los tipos) o saldo insuficiente (exclusivo para Vacaciones).
                 </span>
               </label>
 
@@ -564,6 +670,21 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({
           {/* Campo de Justificación Obligatorio si isExceptionMode es true */}
           {isExceptionMode && (
             <div className="pt-2 space-y-3 animate-fadeIn">
+              {/* Alerta de Bloqueo: El pase de excepción no es válido para Flex o Home week sin saldo */}
+              {intentoExcepcionSinSaldoInvalida && (
+                <div className="rounded border border-red-300 bg-red-50 p-3 text-xs text-red-800 flex items-start gap-2.5 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-red-900">
+                      El pase de excepción no es válido para solicitar Días Flex o Home week sin saldo disponible.
+                    </p>
+                    <p className="text-[11px] text-red-700 mt-0.5">
+                      La excepción de saldo aplica exclusivamente para el beneficio de Vacaciones.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
@@ -656,6 +777,11 @@ export const NewRequestForm: React.FC<NewRequestFormProps> = ({
                   : tipoSeleccionado === 'Home week' && fechasHomeWeekInvalidas
                   ? 'Selecciona un bloque válido de Lunes a Viernes para habilitar el envío.'
                   : 'El botón se habilitará al completar todos los requisitos obligatorios.'}
+              </p>
+            )}
+            {!isSubmitDisabled && intentoExcepcionSinSaldoInvalida && (
+              <p className="text-[11px] text-red-600 text-center mt-1.5 font-medium">
+                El pase de excepción no es válido para solicitar Días Flex o Home week sin saldo disponible.
               </p>
             )}
           </div>
