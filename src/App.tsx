@@ -20,6 +20,7 @@ import {
 import ApprovalsView from './ApprovalsView';
 import NewRequestForm from './NewRequestForm';
 import TyCReportsView from './TyCReportsView';
+import AdminSettingsView from './AdminSettingsView';
 import MinimalAlertModal, { AlertModalState } from './MinimalAlertModal';
 
 interface Solicitud {
@@ -42,8 +43,8 @@ export default function App() {
   // Manejo de Vistas (VISTA 1: Login, VISTA 2: Dashboard)
   const [vistaActual, setVistaActual] = useState<'login' | 'dashboard'>('login');
 
-  // Pestaña Activa en el Dashboard: 'mis-solicitudes' (Colaborador) | 'aprobaciones' (Jefe Directo) | 'reportes-tyc' (Auditoría TyC)
-  const [pestanaActiva, setPestanaActiva] = useState<'mis-solicitudes' | 'aprobaciones' | 'reportes-tyc'>('mis-solicitudes');
+  // Pestaña Activa en el Dashboard: 'mis-solicitudes' | 'aprobaciones' | 'reportes-tyc' | 'gestion-saldos'
+  const [pestanaActiva, setPestanaActiva] = useState<'mis-solicitudes' | 'aprobaciones' | 'reportes-tyc' | 'gestion-saldos'>('mis-solicitudes');
   const [conteoPendientesJefe, setConteoPendientesJefe] = useState(4);
 
   // Estado del Formulario de Login
@@ -518,16 +519,28 @@ export default function App() {
               >
                 <span>Auditoría TyC</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setPestanaActiva('gestion-saldos')}
+                className={`py-5 transition-colors cursor-pointer flex items-center gap-2 ${
+                  pestanaActiva === 'gestion-saldos'
+                    ? 'text-purple-700 border-b-2 border-purple-700 font-semibold'
+                    : 'text-gray-600 hover:text-gray-900 border-b-2 border-transparent'
+                }`}
+              >
+                <span>Centro de Servicios</span>
+              </button>
             </nav>
           </div>
         </div>
 
         {/* Barra de Pestañas Móvil (Responsiva para teléfonos de jefes) */}
-        <div className="md:hidden border-t border-gray-200 px-4 py-2 flex items-center gap-2 bg-gray-50">
+        <div className="md:hidden border-t border-gray-200 px-4 py-2 flex items-center gap-2 bg-gray-50 overflow-x-auto">
           <button
             type="button"
             onClick={() => setPestanaActiva('mis-solicitudes')}
-            className={`flex-1 py-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer ${
+            className={`flex-1 whitespace-nowrap py-2 px-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer ${
               pestanaActiva === 'mis-solicitudes'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'bg-white text-gray-700 border border-gray-200'
@@ -538,7 +551,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setPestanaActiva('aprobaciones')}
-            className={`flex-1 py-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`flex-1 whitespace-nowrap py-2 px-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
               pestanaActiva === 'aprobaciones'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'bg-white text-gray-700 border border-gray-200'
@@ -558,13 +571,24 @@ export default function App() {
           <button
             type="button"
             onClick={() => setPestanaActiva('reportes-tyc')}
-            className={`flex-1 py-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+            className={`flex-1 whitespace-nowrap py-2 px-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer flex items-center justify-center gap-1 ${
               pestanaActiva === 'reportes-tyc'
                 ? 'bg-purple-700 text-white shadow-xs'
                 : 'bg-white text-gray-700 border border-gray-200'
             }`}
           >
-            <span>Auditoría TyC</span>
+            <span>Auditoría</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPestanaActiva('gestion-saldos')}
+            className={`flex-1 whitespace-nowrap py-2 px-2 text-xs font-semibold rounded text-center transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+              pestanaActiva === 'gestion-saldos'
+                ? 'bg-purple-700 text-white shadow-xs'
+                : 'bg-white text-gray-700 border border-gray-200'
+            }`}
+          >
+            <span>Centro Servicios</span>
           </button>
         </div>
       </header>
@@ -1023,8 +1047,10 @@ export default function App() {
         }}
         onPendingCountChange={(cant) => setConteoPendientesJefe(cant)}
       />
-    ) : (
+    ) : pestanaActiva === 'reportes-tyc' ? (
       <TyCReportsView />
+    ) : (
+      <AdminSettingsView />
     )}
   </main>
 
